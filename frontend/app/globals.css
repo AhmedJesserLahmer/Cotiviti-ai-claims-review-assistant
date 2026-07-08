@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  /* Cotiviti brand palette */
+  --color-cotiviti-purple: #5b2d8e;
+  --color-cotiviti-violet: #7e3ff2;
+  --color-cotiviti-ink: #2e1650;
+  --color-cotiviti-magenta: #e5006e;
+  --color-cotiviti-coral: #ff5a5f;
+  --color-cotiviti-teal: #00b6a0;
+  --color-cotiviti-gold: #ffb020;
+  --color-cotiviti-cream: #f7f1ff;
+  --color-cotiviti-lav: #ede4ff;
+
+  --font-display: var(--font-fredoka);
+  --font-sans: var(--font-nunito);
+}
+
+:root {
+  --background: #f7f1ff;
+  --foreground: #2e1650;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 18%, #ede4ff 0, transparent 42%),
+    radial-gradient(circle at 88% 8%, #ffe3f1 0, transparent 38%),
+    radial-gradient(circle at 78% 92%, #d9fff8 0, transparent 40%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-nunito), "Comic Sans MS", sans-serif;
+  min-height: 100vh;
+}
+
+/* Cartoony helpers */
+@utility card-toon {
+  border: 3px solid var(--color-cotiviti-ink);
+  border-radius: 1.5rem;
+  background: #ffffff;
+  box-shadow: 6px 6px 0 0 var(--color-cotiviti-ink);
+}
+
+@utility btn-toon {
+  border: 3px solid var(--color-cotiviti-ink);
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 0 var(--color-cotiviti-ink);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease;
+}
+
+.btn-toon:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 var(--color-cotiviti-ink);
+}
+
+.btn-toon:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 var(--color-cotiviti-ink);
+}
+
+@utility chip-toon {
+  border: 2.5px solid var(--color-cotiviti-ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 0 var(--color-cotiviti-ink);
+  font-weight: 800;
+}

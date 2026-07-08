@@ -1,0 +1,45 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: claims_poc_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: claims_poc_backend
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: claims_poc
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Browser-side calls hit the API through the host-published port.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    container_name: claims_poc_frontend
+    depends_on:
+      - backend
+    environment:
+      # Server-side (SSR) calls stay inside the compose network.
+      INTERNAL_API_BASE_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:

@@ -1,0 +1,19 @@
+# Env files (root .env is used by docker-compose, backend/.env by local uvicorn runs)
+.env
+backend/.env
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/data/
+backend/ml/models/*.joblib
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
