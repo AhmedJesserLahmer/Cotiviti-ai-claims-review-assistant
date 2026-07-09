@@ -373,16 +373,31 @@ flag in your report, but the right call for a fast, explainable hackathon POC.
 ### What "Low-Cost, High-Volume" (etc.) means
 
 After clustering, `train_models.py` **ranks the 4 discovered clusters by average billed
-amount** and assigns human-readable labels (`CLUSTER_LABELS` at `train_models.py:27`):
+amount** and assigns human-readable cost-tier labels (`COST_TIER_LABELS` at
+`train_models.py:33`), then **independently** overwrites whichever single cluster has
+the highest denial rate with a dedicated outlier label (`OUTLIER_LABEL`):
 
 <table>
 <tbody>
-<tr><td><img src="https://img.shields.io/badge/🟢-Low--Cost%20Routine%20Care-2ea44f?style=flat-square" /></td><td>Small dollar amounts per claim, but many claims — e.g. a general clinic doing frequent routine visits</td></tr>
-<tr><td><img src="https://img.shields.io/badge/🔵-Standard%20Volume%20Care-4C6EF5?style=flat-square" /></td><td>Mid-range billing and volume — the "typical" provider</td></tr>
-<tr><td><img src="https://img.shields.io/badge/🟠-High--Cost%20Complex%20Care-fd7e14?style=flat-square" /></td><td>Large dollar amounts per claim, fewer claims — e.g. a specialty/surgical center</td></tr>
-<tr><td><img src="https://img.shields.io/badge/🔴-High--Risk%20%2F%20High--Denial%20Outlier-e03131?style=flat-square" /></td><td>Whichever cluster has the highest denial rate, regardless of its cost rank — overrides the cost-based label because a high denial rate is the more important signal</td></tr>
+<tr><td><img src="https://img.shields.io/badge/🟢-Low--Cost%20Routine%20Care-2ea44f?style=flat-square" /></td><td>Cheapest cluster by avg. billed amount — small dollar amounts per claim, but many claims — e.g. a general clinic doing frequent routine visits</td></tr>
+<tr><td><img src="https://img.shields.io/badge/🔵-Standard%20Volume%20Care-4C6EF5?style=flat-square" /></td><td>2nd-cheapest cluster — mid-range billing and volume, the "typical" provider</td></tr>
+<tr><td><img src="https://img.shields.io/badge/🟠-High--Cost%20Complex%20Care-fd7e14?style=flat-square" /></td><td>3rd-cheapest cluster — larger dollar amounts per claim, fewer claims</td></tr>
+<tr><td><img src="https://img.shields.io/badge/🟣-Premium%20%2F%20High--Cost%20Care-9c36b5?style=flat-square" /></td><td>Priciest cluster by avg. billed amount — e.g. a specialty/surgical center — <b>unless</b> it's also the highest-denial cluster, in which case the row below takes over</td></tr>
+<tr><td><img src="https://img.shields.io/badge/🔴-High--Risk%20%2F%20High--Denial%20Outlier-e03131?style=flat-square" /></td><td>Whichever single cluster has the highest denial rate, <b>regardless of its cost rank</b> — always earned by denial rate alone, never by being the priciest cluster</td></tr>
 </tbody>
 </table>
+
+> [!NOTE]
+> **Why 5 labels for 4 clusters?** Cost rank and denial rate are two independent
+> rankings that can point at different clusters. Earlier, the priciest cluster's
+> cost-tier label and the outlier label were the *same* string
+> (`"High-Risk / High-Denial Outlier"` doubled as both), so if the actual
+> highest-denial cluster wasn't also the priciest one, two different clusters ended up
+> sharing the outlier badge while `"Standard Volume Care"` went completely unused.
+> Giving the priciest tier its own dedicated `"Premium / High-Cost Care"` label fixes
+> that: exactly one cluster ever carries the outlier badge, and it's always earned by
+> denial rate, never by cost coincidence. One cost-tier label goes unused whenever the
+> outlier cluster isn't the priciest one — that's expected, not a bug.
 
 This matters for review because the *same* dollar jump means different things in
 different clusters — a big spike is more suspicious for a normally low-cost, high-volume

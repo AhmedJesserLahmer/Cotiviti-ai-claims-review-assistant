@@ -24,12 +24,20 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 
-CLUSTER_LABELS = [
+# One distinct label per cost-rank tier (index 0 = cheapest cluster ... index 3 =
+# priciest). Kept fully separate from OUTLIER_LABEL below so the two labeling rules
+# in train_clustering() can never collide: previously, index 3 doubled as both "the
+# priciest cluster's cost-tier name" AND the outlier placeholder, so if the actual
+# highest-denial cluster wasn't also the priciest one, two different clusters ended
+# up sharing the "High-Risk / High-Denial Outlier" label while "Standard Volume Care"
+# went unused by any cluster.
+COST_TIER_LABELS = [
     "Low-Cost Routine Care",
     "Standard Volume Care",
     "High-Cost Complex Care",
-    "High-Risk / High-Denial Outlier",
+    "Premium / High-Cost Care",
 ]
+OUTLIER_LABEL = "High-Risk / High-Denial Outlier"
 
 
 def load_data():
@@ -107,13 +115,17 @@ def train_clustering(claims: pd.DataFrame, providers: pd.DataFrame):
     kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
     agg["cluster_id"] = kmeans.fit_predict(X_scaled)
 
-    # Rank clusters by avg_billed so labels are meaningful, but give the
-    # highest-denial-rate cluster the "outlier" label regardless of rank.
+    # Rank clusters by avg_billed so cost-tier labels are meaningful, then
+    # independently overwrite whichever cluster has the highest denial rate with the
+    # outlier label. Because COST_TIER_LABELS and OUTLIER_LABEL never share a value,
+    # this is a clean overwrite: exactly one cluster ever ends up "Outlier", and the
+    # cost-tier label it displaced simply isn't used by any cluster that round
+    # (expected — there are 4 clusters but 5 possible label meanings).
     centroid_order = agg.groupby("cluster_id")["avg_billed"].mean().sort_values().index.tolist()
-    label_by_cluster = {cid: CLUSTER_LABELS[i] for i, cid in enumerate(centroid_order)}
+    label_by_cluster = {cid: COST_TIER_LABELS[i] for i, cid in enumerate(centroid_order)}
 
     highest_denial_cluster = agg.groupby("cluster_id")["denial_rate"].mean().idxmax()
-    label_by_cluster[highest_denial_cluster] = CLUSTER_LABELS[3]
+    label_by_cluster[highest_denial_cluster] = OUTLIER_LABEL
 
     agg["cluster_label"] = agg["cluster_id"].map(label_by_cluster)
 
