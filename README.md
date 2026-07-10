@@ -40,7 +40,7 @@ synthetic healthcare claims — applied to **T**reatment, **P**ayment, and **O**
 > **New here?** Jump to [Domain Primer](#1--domain-primer--what-is-actually-being-modeled)
 > if healthcare billing terms (claim, provider, payer) are unfamiliar, or straight to
 > [The Big Idea](#2--the-big-idea) if you just want the gist.
-> **For the Demo and presentation of this project , checkout https://drive.google.com/drive/folders/1cAgtkP70L8I9sQuNMLcUPcDzfQntwTQS?usp=sharing **
+> **For the Demo and presentation of this project , checkout** https://drive.google.com/drive/folders/1cAgtkP70L8I9sQuNMLcUPcDzfQntwTQS?usp=sharing 
 
 ### 📚 Table of Contents
 
