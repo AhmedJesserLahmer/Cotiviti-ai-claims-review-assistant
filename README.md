@@ -99,7 +99,7 @@ A claims reviewer opens a claim and clicks **Run AI Analysis**. Under the hood:
 ### 🎬 The human flow, visually
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
 flowchart LR
     A(["🧑‍⚕️<br/>Reviewer opens<br/>the dashboard"]) --> B["📋<br/>Picks a claim<br/>(or uploads a CSV)"]
     B --> C["🧮<br/>Backend runs 4 ML signals<br/>classification · prediction<br/>clustering · anomaly lookup"]
@@ -123,7 +123,7 @@ flowchart LR
 ## 3. 🏗️ Project Architecture
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
 flowchart LR
     U["🧑‍⚕️ Claims Reviewer"]
 
@@ -176,7 +176,7 @@ The agent is a `StateGraph` (`backend/agent/graph.py`) with a shared typed `Agen
 **once** to fetch a wider data window before deciding — this is the *agentic* behavior.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
 flowchart TD
     START(["START"]) --> A["fetch_claim_context<br/><i>pull claim + patient + provider<br/>+ time-series window from MongoDB</i>"]
     A --> B["run_ml_signals<br/><i>classification · prediction<br/>clustering lookup · anomaly lookup</i>"]
@@ -303,7 +303,7 @@ region — only whichever numeric columns you feed it.**
 ### The algorithm, step by step
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
 flowchart TD
     S["🎯 Pick k=4 random<br/>starting centroids"] --> A["📍 Assign every provider<br/>to its nearest centroid"]
     A --> M["📐 Move each centroid to the<br/>average position of its<br/>assigned providers"]
