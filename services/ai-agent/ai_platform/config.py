@@ -40,6 +40,13 @@ class AISettings(BaseSettings):
     circuit_failure_threshold: int = Field(default=5, ge=1)
     circuit_recovery_s: float = Field(default=30.0, gt=0)
 
+    # --- budgets -----------------------------------------------------------------
+    # Hard cap on tokens one analysis may consume (all calls, retries and repairs).
+    max_tokens_per_run: int = Field(default=12000, ge=500)
+    max_output_tokens: int = Field(default=800, ge=64)
+    # "model=in/out;..." USD per 1M tokens, overriding ai_platform.pricing defaults.
+    model_prices: str = ""
+
     # --- caching ---------------------------------------------------------------
     cache_enabled: bool = True
     cache_ttl_s: int = Field(default=3600, ge=1)
@@ -62,6 +69,12 @@ class AISettings(BaseSettings):
     @property
     def fallback_model_list(self) -> list[str]:
         return [m.strip() for m in self.fallback_models.split(",") if m.strip()]
+
+    @property
+    def price_table(self) -> dict[str, tuple[float, float]]:
+        from ai_platform.pricing import DEFAULT_PRICES, parse_prices
+
+        return {**DEFAULT_PRICES, **parse_prices(self.model_prices)}
 
     @property
     def model_chain(self) -> list[str]:

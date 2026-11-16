@@ -60,6 +60,11 @@ export interface AIMetadata {
   confidence: number | null;
   key_factors: string[];
   total_latency_ms: number | null;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  estimated_cost_usd?: number;
+  cache_hits?: string[];
+  cache_bypassed?: boolean;
 }
 
 export interface AnalysisResult {

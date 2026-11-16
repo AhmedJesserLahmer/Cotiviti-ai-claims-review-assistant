@@ -117,6 +117,12 @@ class ResilientLLMClient:
                         provider=slot.provider.name, model=slot.provider.model, attempt=attempt_no,
                         outcome="success", latency_ms=_elapsed_ms(started),
                     )
+                    if hasattr(recorder, "record_usage"):
+                        recorder.record_usage(
+                            model=response.model,
+                            prompt_tokens=response.usage.prompt_tokens,
+                            completion_tokens=response.usage.completion_tokens,
+                        )
                 return response
 
             kwargs = {"sleep": self._sleep} if self._sleep else {}

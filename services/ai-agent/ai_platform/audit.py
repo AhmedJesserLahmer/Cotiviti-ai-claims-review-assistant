@@ -58,11 +58,15 @@ class AIRunMetadata(BaseModel):
     confidence: float | None = None
     key_factors: list[str] = Field(default_factory=list)
     total_latency_ms: float | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    estimated_cost_usd: float = 0.0
     cache_hits: list[str] = Field(default_factory=list)
     cache_bypassed: bool = False
 
     _t0: float = PrivateAttr(default_factory=time.perf_counter)
     _primary_model: str | None = PrivateAttr(default=None)
+    _prices: dict = PrivateAttr(default_factory=dict)
 
     # --- recorder protocols ---------------------------------------------------
     def record_attempt(
@@ -79,6 +83,22 @@ class AIRunMetadata(BaseModel):
         if outcome == "success":
             self.provider_used, self.model_used = provider, model
             self.model_fallback_used = model != self._primary_model
+
+    def set_prices(self, prices: dict[str, tuple[float, float]]) -> None:
+        self._prices = prices
+
+    def record_usage(self, *, model: str, prompt_tokens: int, completion_tokens: int) -> None:
+        from ai_platform.pricing import estimate_cost
+
+        self.prompt_tokens += prompt_tokens
+        self.completion_tokens += completion_tokens
+        self.estimated_cost_usd = round(
+            self.estimated_cost_usd + estimate_cost(model, prompt_tokens, completion_tokens, self._prices), 6
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
 
     def record_repair(self, error: str) -> None:
         self.repair_attempts += 1

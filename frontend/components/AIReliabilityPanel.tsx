@@ -59,6 +59,11 @@ export default function AIReliabilityPanel({ meta }: { meta: AIMetadata }) {
         <Stat label="JSON repairs" value={String(meta.repair_attempts)} />
         <Stat label="Guardrail events" value={String(firedGuardrails.length)} />
         <Stat
+          label="Tokens / cost"
+          value={`${(meta.prompt_tokens ?? 0) + (meta.completion_tokens ?? 0)} / $${(meta.estimated_cost_usd ?? 0).toFixed(4)}`}
+        />
+        <Stat label="Cache" value={meta.cache_hits && meta.cache_hits.length > 0 ? "hit" : "miss"} />
+        <Stat
           label="Prompts"
           value={Object.entries(meta.prompt_versions)
             .map(([name, version]) => `${name.replace("claim_", "")}@${version}`)

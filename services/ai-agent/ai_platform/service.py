@@ -22,7 +22,7 @@ from ai_platform.audit import AIRunMetadata
 from ai_platform.cache import NullCache, ResponseCache, build_cache, cache_key
 from ai_platform.client import ResilientLLMClient, build_client
 from ai_platform.config import AISettings, get_ai_settings
-from ai_platform.errors import AllProvidersFailedError, OutputValidationError
+from ai_platform.errors import AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError
 from ai_platform.fallback import rules
 from ai_platform.guardrails.base import GuardrailFinding
 from ai_platform.guardrails.injection import sanitize_payload
@@ -49,6 +49,13 @@ class ClaimReviewAI:
 
     def _key(self, prompt_id: str, messages) -> str:
         return cache_key(prompt_id, messages, model_chain=[slot.label for slot in self.client.slots])
+
+    def _check_budget(self, run: AIRunMetadata) -> None:
+        run.set_prices(self.settings.price_table)
+        if run.total_tokens >= self.settings.max_tokens_per_run:
+            raise TokenBudgetExceededError(
+                f"token budget exhausted ({run.total_tokens}/{self.settings.max_tokens_per_run})"
+            )
 
     async def _cached(self, key: str, run: AIRunMetadata, prompt_name: str) -> str | None:
         if run.cache_bypassed:
@@ -94,9 +101,12 @@ class ClaimReviewAI:
         if cached is not None:
             return cached
         try:
-            response = await self.client.generate(messages, recorder=run, temperature=self.settings.temperature)
+            self._check_budget(run)
+            response = await self.client.generate(
+                messages, recorder=run, temperature=self.settings.temperature, max_tokens=self.settings.max_output_tokens
+            )
             text, findings = sanitize_reasoning(response.text, max_chars=self.settings.max_reasoning_chars)
-        except (AllProvidersFailedError, OutputValidationError) as exc:
+        except (AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError) as exc:
             run.mark_degraded(f"reasoning: {exc}")
             return rules.build_reasoning(claim, signals)
         run.add_events(findings)
@@ -149,6 +159,7 @@ class ClaimReviewAI:
         if cached is not None:
             return RecommendationOutput.model_validate_json(cached)
         try:
+            self._check_budget(run)
             output = await generate_structured(
                 self.client,
                 messages,
@@ -158,8 +169,9 @@ class ClaimReviewAI:
                 recorder=run,
                 counter=run,
                 temperature=self.settings.temperature,
+                max_tokens=self.settings.max_output_tokens,
             )
-        except (AllProvidersFailedError, OutputValidationError) as exc:
+        except (AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError) as exc:
             return fallback(f"recommendation: {exc}")
         # Cache the model's own answer; policy is re-applied on every run.
         await self.cache.set(key, output.model_dump_json(), self.settings.cache_ttl_s)

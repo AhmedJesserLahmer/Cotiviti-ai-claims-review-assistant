@@ -8,15 +8,23 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from ai_platform.providers.base import ChatMessage, LLMResponse
+from ai_platform.providers.base import ChatMessage, LLMResponse, TokenUsage
 
 ScriptItem = str | BaseException
 
 
 class ScriptedProvider:
-    def __init__(self, script: Iterable[ScriptItem], *, name: str = "scripted", model: str = "scripted-1"):
+    def __init__(
+        self,
+        script: Iterable[ScriptItem],
+        *,
+        name: str = "scripted",
+        model: str = "scripted-1",
+        usage: TokenUsage | None = None,
+    ):
         self.name = name
         self.model = model
+        self.usage = usage or TokenUsage()
         self._script = list(script)
         self.calls: list[list[ChatMessage]] = []
 
@@ -37,4 +45,4 @@ class ScriptedProvider:
         item = self._script.pop(0)
         if isinstance(item, BaseException):
             raise item
-        return LLMResponse(text=item, provider=self.name, model=self.model, latency_ms=1.0)
+        return LLMResponse(text=item, provider=self.name, model=self.model, latency_ms=1.0, usage=self.usage)

@@ -75,6 +75,10 @@ class AllProvidersFailedError(AIError):
         super().__init__(f"All LLM providers failed: {detail}")
 
 
+class TokenBudgetExceededError(AIError):
+    """The analysis already consumed its token budget; no further LLM calls are made."""
+
+
 class OutputParseError(AIError):
     """The model output could not be parsed as the expected format (e.g. JSON)."""
 
