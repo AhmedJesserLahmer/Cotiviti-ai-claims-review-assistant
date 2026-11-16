@@ -11,6 +11,8 @@ circuit breakers, model fallback, guardrails, schema validation and a determinis
 fallback. The graph itself stays a pure orchestration of data, ML and AI steps.
 """
 
+import logging
+
 from langgraph.graph import END, StateGraph
 
 from agent.state import AgentState
@@ -20,6 +22,8 @@ from db.mongo import db
 from ml.inference import classify_claim, predict_payment
 
 MAX_LOOPS = 1
+
+log = logging.getLogger("claims_api.agent")
 
 
 async def fetch_claim_context(state: AgentState) -> AgentState:
@@ -117,6 +121,22 @@ async def persist_result(state: AgentState) -> AgentState:
     }
     await db["claim_analyses"].update_one(
         {"claim_id": state["claim_id"]}, {"$set": doc}, upsert=True
+    )
+    log.info(
+        "claim analyzed",
+        extra={
+            "claim_id": state["claim_id"],
+            "recommendation": state["recommendation"],
+            "decision_source": run.decision_source,
+            "model": run.model_used,
+            "model_fallback": run.model_fallback_used,
+            "degraded": run.degraded,
+            "policy_override": run.recommendation_overridden,
+            "injection_detected": run.injection_detected,
+            "repairs": run.repair_attempts,
+            "loops": state.get("loops", 0),
+            "duration_ms": run.total_latency_ms,
+        },
     )
     return state
 
