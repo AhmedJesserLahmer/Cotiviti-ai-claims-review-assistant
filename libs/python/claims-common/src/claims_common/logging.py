@@ -54,6 +54,9 @@ def configure_logging(level: str | None = None, fmt: str | None = None) -> None:
     root.setLevel(level)
     # uvicorn's own access log duplicates ours; keep its error logger only.
     logging.getLogger("uvicorn.access").disabled = True
+    # httpx logs every request at INFO; our ServiceClient logs what matters.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 class RequestContextMiddleware:
