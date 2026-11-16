@@ -17,6 +17,8 @@ x-service-env: &service-env
   MONGO_URI: mongodb://mongo:27017
   MONGO_DB_NAME: claims_poc
   LOG_FORMAT: json
+  # Traces go to Jaeger when the observability profile runs; harmless otherwise.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
 services:
   mongo:
@@ -143,6 +145,28 @@ services:
       INTERNAL_API_BASE_URL: http://claims-api:8000
     ports:
       - "3000:3000"
+
+  # --- optional observability stack: docker compose --profile observability up -d ---
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: claims_poc_prometheus
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=3d"]
+    volumes:
+      - ../observability/prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    mem_limit: 256m
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: claims_poc_jaeger
+    profiles: ["observability"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # UI; set OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 in .env
+    mem_limit: 256m
 
 volumes:
   mongo_data:
