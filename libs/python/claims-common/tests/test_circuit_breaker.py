@@ -1,6 +1,6 @@
 import pytest
 
-from ai_platform.resilience.circuit_breaker import CircuitBreaker, CircuitState
+from claims_common.resilience.circuit_breaker import CircuitBreaker, CircuitState
 
 
 class Clock:

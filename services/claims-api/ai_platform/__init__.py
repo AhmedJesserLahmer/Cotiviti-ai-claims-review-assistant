@@ -9,6 +9,6 @@ This package wraps every LLM interaction with:
 * fallback    - a deterministic rule engine used when no LLM is available
 * audit       - per-run metadata describing exactly what happened
 
-It does not import anything from the rest of the service, so it can later be
-moved into its own microservice (services/ai-agent) unchanged.
+It depends only on the shared claims_common library, never on the rest of the
+service, so it can move between services unchanged.
 """
