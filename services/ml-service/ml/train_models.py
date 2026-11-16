@@ -5,24 +5,30 @@
   - Anomaly Detection: IsolationForest -> anomalous provider billing days
 
 Run with: python -m ml.train_models
-Reads CSVs from backend/data/, writes models to backend/ml/models/,
-and writes augmented providers.csv / provider_timeseries.csv back to backend/data/
+Reads CSVs from data/, writes a new immutable model version to the registry
+(ml/models/<version>/, see ml/registry.py) with holdout metrics, and writes
+augmented providers.csv / provider_timeseries.csv back to data/
 with cluster and anomaly columns so they can be seeded into MongoDB as-is.
 """
 
+import hashlib
 import os
 
-import joblib
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, IsolationForest, RandomForestClassifier
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, r2_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from ml import registry
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+HOLDOUT_FRACTION = 0.2
+RANDOM_STATE = 42
 
 # One distinct label per cost-rank tier (index 0 = cheapest cluster ... index 3 =
 # priciest). Kept fully separate from OUTLIER_LABEL below so the two labeling rules
@@ -157,32 +163,75 @@ def train_anomaly_detector(timeseries: pd.DataFrame):
     return ts, model
 
 
-def main():
-    os.makedirs(MODELS_DIR, exist_ok=True)
-    providers, patients, claims, timeseries = load_data()
+def _sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
+
+def evaluate_claim_models(df: pd.DataFrame) -> dict:
+    """Holdout metrics: fit on 80%, score on 20%. Deployed models are refit on all rows."""
+    train, test = train_test_split(
+        df, test_size=HOLDOUT_FRACTION, random_state=RANDOM_STATE, stratify=df["risk_label"]
+    )
+    classifier = train_classifier(train)
+    predictor = train_predictor(train)
+    predicted_labels = classifier.predict(test[classifier.feature_columns_])
+    predicted_paid = predictor.predict(test[predictor.feature_columns_])
+    return {
+        "holdout_rows": int(len(test)),
+        "classifier": {
+            "accuracy": round(float(accuracy_score(test["risk_label"], predicted_labels)), 4),
+            "macro_f1": round(float(f1_score(test["risk_label"], predicted_labels, average="macro")), 4),
+        },
+        "predictor": {
+            "mae": round(float(mean_absolute_error(test["paid_amount"], predicted_paid)), 2),
+            "r2": round(float(r2_score(test["paid_amount"], predicted_paid)), 4),
+        },
+    }
+
+
+def main():
+    providers, patients, claims, timeseries = load_data()
     training_frame = build_training_frame(claims, patients, providers)
 
+    metrics = evaluate_claim_models(training_frame)
     classifier = train_classifier(training_frame)
-    joblib.dump(classifier, os.path.join(MODELS_DIR, "classifier.joblib"))
-
     predictor = train_predictor(training_frame)
-    joblib.dump(predictor, os.path.join(MODELS_DIR, "predictor.joblib"))
 
     providers_out, scaler, kmeans, cluster_features, label_by_cluster = train_clustering(claims, providers)
-    joblib.dump(
-        {"scaler": scaler, "kmeans": kmeans, "features": cluster_features, "labels": label_by_cluster},
-        os.path.join(MODELS_DIR, "cluster_model.joblib"),
-    )
     providers_out.to_csv(os.path.join(DATA_DIR, "providers.csv"), index=False)
 
     ts_out, anomaly_model = train_anomaly_detector(timeseries)
-    joblib.dump(anomaly_model, os.path.join(MODELS_DIR, "anomaly_model.joblib"))
     ts_out.drop(columns=["count_z", "amount_z"]).to_csv(
         os.path.join(DATA_DIR, "provider_timeseries.csv"), index=False
     )
 
-    print("Trained and saved: classifier, predictor, cluster_model, anomaly_model")
+    version = os.environ.get("NEW_MODEL_VERSION") or registry.new_version_id()
+    manifest = {
+        "training_rows": int(len(training_frame)),
+        "data_sha256": {"claims.csv": _sha256(os.path.join(DATA_DIR, "claims.csv"))},
+        "features": {"classifier": classifier.feature_columns_, "predictor": predictor.feature_columns_},
+        "metrics": metrics,
+        "clusters": {str(k): v for k, v in label_by_cluster.items()},
+    }
+    path = registry.save_version(
+        version,
+        {
+            "classifier": classifier,
+            "predictor": predictor,
+            "cluster_model": {
+                "scaler": scaler, "kmeans": kmeans, "features": cluster_features, "labels": label_by_cluster,
+            },
+            "anomaly_model": anomaly_model,
+        },
+        manifest,
+    )
+
+    print(f"Trained model version {version} -> {path}")
+    print(f"Holdout metrics: {metrics}")
     print(f"Augmented providers.csv with cluster_id/cluster_label ({len(providers_out)} rows)")
     print(f"Augmented provider_timeseries.csv with anomaly_score/is_anomaly ({len(ts_out)} rows)")
 

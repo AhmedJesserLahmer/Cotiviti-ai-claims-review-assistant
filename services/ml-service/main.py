@@ -5,7 +5,7 @@ Internal service (called by ai-agent and claims-api), so CORS is disabled.
 
 from claims_common.app import create_app
 from core.config import settings
-from routers import health, scoring
+from routers import health, models, scoring
 
 app = create_app(
     settings,
@@ -16,3 +16,4 @@ app = create_app(
 )
 
 app.include_router(scoring.router)
+app.include_router(models.router)

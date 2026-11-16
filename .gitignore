@@ -16,7 +16,8 @@ __pycache__/
 htmlcov/
 *.egg-info/
 services/*/data/
-services/*/ml/models/*.joblib
+services/*/ml/models/*
+!services/*/ml/models/.gitkeep
 
 # Node / Next.js
 node_modules/

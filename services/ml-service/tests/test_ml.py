@@ -1,19 +1,13 @@
-"""Unit tests for the trained ML models via the inference helpers.
-
-Requires that models have been trained (python -m ml.train_models) — they are
-baked into the Docker image, and CI/local runs train first.
-"""
-
-import os
+"""Unit tests for the trained models via the inference helpers."""
 
 import pytest
 
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "models")
+from ml import registry
 
-pytestmark = pytest.mark.skipif(
-    not os.path.exists(os.path.join(MODELS_DIR, "classifier.joblib")),
-    reason="models not trained yet (run: python -m ml.train_models)",
-)
+try:
+    registry.current_version()
+except registry.ModelNotFoundError:
+    pytest.skip("models not trained yet (run: python -m ml.train_models)", allow_module_level=True)
 
 SAMPLE_CLAIM = {
     "billed_amount": 5200.0,
@@ -42,6 +36,10 @@ def test_predict_payment_is_non_negative():
     assert predicted >= 0.0
 
 
-def test_cluster_and_anomaly_models_exist():
-    for name in ["cluster_model.joblib", "anomaly_model.joblib", "predictor.joblib"]:
-        assert os.path.exists(os.path.join(MODELS_DIR, name)), f"missing {name}"
+def test_active_version_has_all_artifacts_and_metrics():
+    path = registry.version_dir(registry.current_version())
+    for name in registry.ARTIFACTS:
+        assert (path / f"{name}.joblib").exists(), f"missing {name}"
+    manifest = registry.load_bundle().manifest
+    assert 0 <= manifest["metrics"]["classifier"]["accuracy"] <= 1
+    assert manifest["metrics"]["predictor"]["mae"] >= 0
