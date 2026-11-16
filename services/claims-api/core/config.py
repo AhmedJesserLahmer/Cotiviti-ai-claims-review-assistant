@@ -7,6 +7,8 @@ class Settings(ServiceSettings):
     mongo_db_name: str = "claims_poc"
     # Internal URL of the AI agent service.
     ai_agent_url: str = "http://localhost:8002"
+    # Internal URL of the ML service (owns the synthetic dataset and seeding).
+    ml_service_url: str = "http://localhost:8001"
     # An analysis runs ML + up to four LLM calls (with retries); allow for that.
     ai_agent_timeout_s: float = 90.0
 

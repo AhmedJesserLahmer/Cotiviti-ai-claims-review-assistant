@@ -25,4 +25,4 @@ async def test_mongo_check(monkeypatch):
 
 def test_dependency_info_reports_ai_agent():
     deps = health.dependency_info()["dependencies"]
-    assert deps[0]["service"] == "ai-agent" and deps[0]["state"] == "closed"
+    assert [d["service"] for d in deps] == ["ai-agent", "ml-service"]

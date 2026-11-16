@@ -4,7 +4,7 @@ Only MongoDB gates readiness. The ai-agent is reported for information: when it 
 down, browsing claims still works and analyze calls return 503 with a clear message.
 """
 
-from core.clients import get_ai_agent
+from core.clients import get_ai_agent, get_ml_service
 from db.mongo import db
 
 
@@ -16,4 +16,4 @@ READINESS_CHECKS = {"mongo": mongo_ping}
 
 
 def dependency_info() -> dict:
-    return {"dependencies": [get_ai_agent().snapshot()]}
+    return {"dependencies": [get_ai_agent().snapshot(), get_ml_service().snapshot()]}

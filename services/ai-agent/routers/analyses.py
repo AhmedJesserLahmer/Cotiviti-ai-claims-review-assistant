@@ -4,8 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from agent.graph import analyze_claim
 from ai_platform.service import get_claim_review_ai
-from claims_common.contracts import AnalysisRequest, AnalysisResult, SeedResponse
-from data_gen.seed_mongo import seed
+from claims_common.contracts import AnalysisRequest, AnalysisResult
 from db.mongo import db
 
 router = APIRouter(prefix="/v1", tags=["analyses"])
@@ -25,11 +24,6 @@ async def get_analysis(claim_id: str):
     if not analysis:
         raise HTTPException(status_code=404, detail="No analysis found for this claim yet")
     return analysis
-
-
-@router.post("/seed", response_model=SeedResponse)
-async def seed_database():
-    return SeedResponse(status="ok", counts=await seed())
 
 
 @router.get("/ai/status")

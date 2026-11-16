@@ -4,11 +4,6 @@ motor==3.6.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
 httpx==0.28.1
-scikit-learn==1.6.0
-pandas==2.2.3
-numpy==2.2.1
-faker==33.1.0
-joblib==1.4.2
 langgraph==0.2.60
 langchain-groq==0.2.1
 langchain-core==0.3.28

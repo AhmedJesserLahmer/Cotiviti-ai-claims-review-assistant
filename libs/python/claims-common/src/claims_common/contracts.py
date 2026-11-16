@@ -44,3 +44,33 @@ class AnalysisResult(BaseModel):
 class SeedResponse(BaseModel):
     status: str
     counts: dict[str, int]
+
+
+class ScoreRequest(BaseModel):
+    """Features needed by the claim-level models (classification + payment prediction)."""
+
+    billed_amount: float
+    length_of_stay: int = 0
+    prior_claims_count: int = 0
+    treatment_type: str
+    procedure_code: str
+    patient_age: int
+    provider_avg_claim_amount: float
+
+
+class ClassifyResponse(BaseModel):
+    predicted_risk_label: str
+    risk_probabilities: dict[str, float]
+    model_version: str | None = None
+
+
+class PaymentResponse(BaseModel):
+    predicted_paid_amount: float
+    model_version: str | None = None
+
+
+class ScoreResponse(BaseModel):
+    predicted_risk_label: str
+    risk_probabilities: dict[str, float]
+    predicted_paid_amount: float
+    model_version: str | None = None

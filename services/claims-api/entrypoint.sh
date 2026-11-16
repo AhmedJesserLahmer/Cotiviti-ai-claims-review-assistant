@@ -18,7 +18,7 @@ else:
     raise SystemExit("MongoDB did not become available in time.")
 PY
 
-# Seeding is done by the service that owns the synthetic dataset (ai-agent).
+# Seeding is done by the service that owns the synthetic dataset (ml-service).
 echo "Starting API..."
 exec uvicorn main:app --host 0.0.0.0 --port 8000 \
   --workers "${UVICORN_WORKERS:-1}" \

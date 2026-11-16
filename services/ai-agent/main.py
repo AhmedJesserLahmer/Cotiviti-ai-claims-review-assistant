@@ -4,18 +4,29 @@ Internal service: it is only called by claims-api (and the worker), never by bro
 so CORS is disabled.
 """
 
+from contextlib import asynccontextmanager
+
 from ai_platform.service import get_claim_review_ai
 from claims_common.app import create_app
+from core.clients import close_clients, get_ml_service
 from core.config import settings
 from routers import analyses, health
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    yield
+    await close_clients()
+
 
 app = create_app(
     settings,
     title="Claims Review AI Agent",
     version="0.1.0",
     readiness_checks=health.READINESS_CHECKS,
-    health_info=lambda: {"ai": get_claim_review_ai().health()},
+    health_info=lambda: {"ai": get_claim_review_ai().health(), "dependencies": [get_ml_service().snapshot()]},
     cors=False,
+    lifespan=lifespan,
 )
 
 app.include_router(analyses.router)

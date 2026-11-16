@@ -5,6 +5,7 @@ from claims_common.resilience.retry import RetryPolicy
 from core.config import settings
 
 _ai_agent: ServiceClient | None = None
+_ml_service: ServiceClient | None = None
 
 
 def get_ai_agent() -> ServiceClient:
@@ -20,8 +21,16 @@ def get_ai_agent() -> ServiceClient:
     return _ai_agent
 
 
+def get_ml_service() -> ServiceClient:
+    global _ml_service
+    if _ml_service is None:
+        _ml_service = ServiceClient("ml-service", settings.ml_service_url, timeout_s=120.0)
+    return _ml_service
+
+
 async def close_clients() -> None:
-    global _ai_agent
-    if _ai_agent is not None:
-        await _ai_agent.aclose()
-        _ai_agent = None
+    global _ai_agent, _ml_service
+    for client in (_ai_agent, _ml_service):
+        if client is not None:
+            await client.aclose()
+    _ai_agent = _ml_service = None

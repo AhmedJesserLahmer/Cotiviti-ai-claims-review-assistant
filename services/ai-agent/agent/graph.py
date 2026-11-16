@@ -19,7 +19,8 @@ from agent.state import AgentState
 from ai_platform.audit import AIRunMetadata
 from ai_platform.service import get_claim_review_ai
 from db.mongo import db
-from ml.inference import classify_claim, predict_payment
+from claims_common.contracts import ScoreRequest, ScoreResponse
+from core.clients import get_ml_service
 
 MAX_LOOPS = 1
 
@@ -52,22 +53,35 @@ async def fetch_claim_context(state: AgentState) -> AgentState:
     }
 
 
+async def score_claim(claim: dict, patient: dict, provider: dict) -> ScoreResponse:
+    """Claim-level model outputs from ml-service."""
+    request = ScoreRequest(
+        billed_amount=claim["billed_amount"],
+        length_of_stay=claim.get("length_of_stay") or 0,
+        prior_claims_count=claim.get("prior_claims_count") or 0,
+        treatment_type=claim["treatment_type"],
+        procedure_code=claim["procedure_code"],
+        patient_age=patient["age"],
+        provider_avg_claim_amount=provider.get("avg_claim_amount", claim["billed_amount"]),
+    )
+    body = await get_ml_service().post("/v1/score", json=request.model_dump())
+    return ScoreResponse.model_validate(body)
+
+
 async def run_ml_signals(state: AgentState) -> AgentState:
     claim = state["claim"]
-    patient = state["patient"]
     provider = state["provider"]
     timeseries_window = state["timeseries_window"]
 
-    risk_label, risk_probabilities = classify_claim(claim, patient)
-    predicted_paid = predict_payment(claim, provider.get("avg_claim_amount", claim["billed_amount"]))
+    score = await score_claim(claim, state["patient"], provider)
 
     anomaly_days = [row for row in timeseries_window if row.get("is_anomaly")]
     most_recent = timeseries_window[-1] if timeseries_window else {}
 
     signals = {
-        "predicted_risk_label": risk_label,
-        "risk_probabilities": risk_probabilities,
-        "predicted_paid_amount": predicted_paid,
+        "predicted_risk_label": score.predicted_risk_label,
+        "risk_probabilities": score.risk_probabilities,
+        "predicted_paid_amount": score.predicted_paid_amount,
         "provider_cluster_id": int(provider.get("cluster_id", -1)),
         "provider_cluster_label": provider.get("cluster_label", "Unknown"),
         "anomaly_flagged_days": len(anomaly_days),

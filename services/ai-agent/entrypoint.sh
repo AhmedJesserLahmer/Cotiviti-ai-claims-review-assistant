@@ -18,11 +18,6 @@ else:
     raise SystemExit("MongoDB did not become available in time.")
 PY
 
-if [ "${SEED_ON_START:-true}" = "true" ]; then
-  echo "Seeding MongoDB..."
-  python -m data_gen.seed_mongo
-fi
-
 echo "Starting ai-agent..."
 exec uvicorn main:app --host 0.0.0.0 --port "${PORT:-8002}" \
   --workers "${UVICORN_WORKERS:-1}" \
