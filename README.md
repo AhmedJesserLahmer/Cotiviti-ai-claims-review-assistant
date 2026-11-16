@@ -53,6 +53,12 @@ synthetic healthcare claims — applied to **T**reatment, **P**ayment, and **O**
 
 ---
 
+> [!IMPORTANT]
+> **Production track.** The repository is being turned into a production-grade monorepo
+> (`services/`, `frontend/`, `infra/`). See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan
+> and [docs/ai-reliability.md](docs/ai-reliability.md) for the AI reliability layer
+> (retries, fallbacks, circuit breakers, guardrails, schema validation, audit trail).
+
 ## 1. 🏥 Domain Primer — What Is Actually Being Modeled
 
 If you've never worked in healthcare billing, start here.
@@ -172,8 +178,8 @@ flowchart LR
 
 ## 4. 🕸️ LangGraph Agent Architecture
 
-The agent is a `StateGraph` (`backend/agent/graph.py`) with a shared typed `AgentState`
-(`backend/agent/state.py`). Nodes run in sequence; the recommendation node can loop back
+The agent is a `StateGraph` (`services/claims-api/agent/graph.py`) with a shared typed `AgentState`
+(`services/claims-api/agent/state.py`). Nodes run in sequence; the recommendation node can loop back
 **once** to fetch a wider data window before deciding — this is the *agentic* behavior.
 
 ```mermaid
@@ -338,7 +344,7 @@ flowchart TD
 ### Where this lives in the code
 
 ```python
-# backend/ml/train_models.py:95-121  (train_clustering)
+# services/claims-api/ml/train_models.py:95-121  (train_clustering)
 feature_cols = ["avg_billed", "claim_volume", "denial_rate", "avg_length_of_stay"]
 scaler = StandardScaler()                    # put all 4 axes on comparable scale
 X_scaled = scaler.fit_transform(agg[feature_cols])
@@ -408,7 +414,7 @@ clinic than for a provider that already bills large amounts routinely.
 
 ## 7. 🧬 Data & ML Layer
 
-**Synthetic data** (`backend/data_gen/generate_data.py`, fixed seed — no real patient
+**Synthetic data** (`services/claims-api/data_gen/generate_data.py`, fixed seed — no real patient
 data is used anywhere):
 
 | Collection | ~Count | Key fields |
@@ -418,7 +424,7 @@ data is used anywhere):
 | `claims` | 1,500+ | billed/paid amount, treatment_type, length_of_stay, `risk_label` (grows via CSV upload) |
 | `provider_timeseries` | 5,400 | daily_claim_count, daily_paid_total, + `anomaly_score`/`is_anomaly` |
 
-**Models** (`backend/ml/train_models.py`, persisted with joblib, loaded once at startup
+**Models** (`services/claims-api/ml/train_models.py`, persisted with joblib, loaded once at startup
 in `ml/inference.py`):
 
 <table>
@@ -453,7 +459,7 @@ Cotiviti-Intern-Topic2/
 ├── .env.example                  # env var template (real .env files are gitignored)
 ├── sample_claims_upload.csv      # example file for the bulk-upload feature
 │
-├── backend/                      # FastAPI + ML + LangGraph
+├── services/claims-api/                      # FastAPI + ML + LangGraph
 │   ├── Dockerfile / entrypoint.sh
 │   ├── main.py                   # app + CORS + routers
 │   ├── core/config.py            # settings (.env)
@@ -573,8 +579,8 @@ API_BASE_URL=http://localhost:8000 pytest
 
 <table>
 <tbody>
-<tr><td><img src="https://img.shields.io/badge/-Chain%20Reasoning-12B886?style=flat-square" /></td><td><code>backend/agent/graph.py::reasoning_node</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Agentic%20Generative%20AI-F59F00?style=flat-square" /></td><td><code>backend/agent/graph.py::recommendation_node</code> (+ conditional loop)</td></tr>
+<tr><td><img src="https://img.shields.io/badge/-Chain%20Reasoning-12B886?style=flat-square" /></td><td><code>services/claims-api/agent/graph.py::reasoning_node</code></td></tr>
+<tr><td><img src="https://img.shields.io/badge/-Agentic%20Generative%20AI-F59F00?style=flat-square" /></td><td><code>services/claims-api/agent/graph.py::recommendation_node</code> (+ conditional loop)</td></tr>
 <tr><td><img src="https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square" /></td><td><code>ml/train_models.py::train_classifier</code> (RandomForest) + <code>ml/inference.py::classify_claim</code></td></tr>
 <tr><td><img src="https://img.shields.io/badge/-Prediction-7048E8?style=flat-square" /></td><td><code>ml/train_models.py::train_predictor</code> (GradientBoosting) + <code>ml/inference.py::predict_payment</code></td></tr>
 <tr><td><img src="https://img.shields.io/badge/-Inference-495057?style=flat-square" /></td><td>Signal synthesis into <code>AnalysisResult</code> across <code>agent/graph.py</code></td></tr>
