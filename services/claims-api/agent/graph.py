@@ -105,6 +105,7 @@ async def recommendation_node(state: AgentState) -> AgentState:
 
 
 async def persist_result(state: AgentState) -> AgentState:
+    run = state["ai_run"].finish()
     doc = {
         "claim_id": state["claim_id"],
         "signals": state["signals"],
@@ -112,6 +113,7 @@ async def persist_result(state: AgentState) -> AgentState:
         "recommendation": state["recommendation"],
         "recommendation_summary": state["recommendation_summary"],
         "loops": state.get("loops", 0),
+        "ai_metadata": run.model_dump(),
     }
     await db["claim_analyses"].update_one(
         {"claim_id": state["claim_id"]}, {"$set": doc}, upsert=True
@@ -160,7 +162,6 @@ def get_graph():
 async def analyze_claim(claim_id: str) -> dict:
     graph = get_graph()
     result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": AIRunMetadata()})
-    result["ai_run"].finish()
     return {
         "claim_id": result["claim_id"],
         "signals": result["signals"],

@@ -25,6 +25,43 @@ export interface MLSignals {
   is_recent_anomaly: boolean;
 }
 
+export interface AIAttempt {
+  provider: string;
+  model: string;
+  attempt: number;
+  outcome: "success" | "error" | "circuit_open";
+  latency_ms: number;
+  error: string | null;
+}
+
+export interface GuardrailEvent {
+  guardrail: string;
+  action: string;
+  detail: string;
+}
+
+export interface AIMetadata {
+  run_id: string;
+  started_at: string;
+  prompt_versions: Record<string, string>;
+  attempts: AIAttempt[];
+  provider_used: string | null;
+  model_used: string | null;
+  model_fallback_used: boolean;
+  degraded: boolean;
+  degraded_reason: string | null;
+  decision_source: "llm" | "rules";
+  repair_attempts: number;
+  guardrail_events: GuardrailEvent[];
+  injection_detected: boolean;
+  recommendation_overridden: boolean;
+  original_recommendation: string | null;
+  policy_violations: string[];
+  confidence: number | null;
+  key_factors: string[];
+  total_latency_ms: number | null;
+}
+
 export interface AnalysisResult {
   claim_id: string;
   signals: MLSignals;
@@ -32,6 +69,7 @@ export interface AnalysisResult {
   recommendation: "approve" | "flag_for_review" | "request_more_data";
   recommendation_summary: string;
   loops: number;
+  ai_metadata?: AIMetadata | null;
 }
 
 export interface Provider {

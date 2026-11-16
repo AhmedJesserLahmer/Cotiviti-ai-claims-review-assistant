@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from ai_platform.audit import AIRunMetadata
+
 
 class ClaimOut(BaseModel):
     claim_id: str
@@ -37,6 +39,9 @@ class AnalysisResult(BaseModel):
     recommendation: Literal["approve", "flag_for_review", "request_more_data"]
     recommendation_summary: str
     loops: int
+    # Audit trail (models tried, fallbacks, guardrails, policy overrides). Optional so
+    # analyses stored before the AI reliability layer still validate.
+    ai_metadata: AIRunMetadata | None = None
 
 
 class TimeseriesPoint(BaseModel):

@@ -34,37 +34,37 @@ rule engine produces the decision, and the response says so.
 
 ## Phase 0: Monorepo foundation
 
-- [ ] 1. docs: add production roadmap and target architecture
-- [ ] 2. refactor: move backend into services/claims-api
-- [ ] 3. build: move compose file into infra/docker and include it from the root
-- [ ] 4. build: add root Makefile with memory-safe targets
-- [ ] 5. chore: add editorconfig and monorepo-wide gitignore rules
-- [ ] 6. build(claims-api): add pyproject with pytest and ruff config
+- [x] 1. docs: add production roadmap and target architecture
+- [x] 2. refactor: move backend into services/claims-api
+- [x] 3. build: move compose file into infra/docker and include it from the root
+- [x] 4. build: add root Makefile with memory-safe targets
+- [x] 5. chore: add editorconfig and monorepo-wide gitignore rules
+- [x] 6. build(claims-api): add pyproject with pytest and ruff config
 
 ## Phase 1: AI reliability layer (`ai_platform`)
 
-- [ ] 7. feat(ai): scaffold ai_platform package with error taxonomy
-- [ ] 8. feat(ai): add environment-driven AI settings
-- [ ] 9. feat(ai): add async retry with exponential backoff and full jitter
-- [ ] 10. feat(ai): add timeout guard for LLM calls
-- [ ] 11. feat(ai): add circuit breaker
-- [ ] 12. feat(ai): define LLM provider protocol and response types
-- [ ] 13. feat(ai): add Groq provider adapter with error mapping
-- [ ] 14. feat(ai): add scripted provider for tests and offline runs
-- [ ] 15. feat(ai): add resilient LLM client with model fallback chain
-- [ ] 16. feat(ai): add versioned prompt registry with hardened prompts
-- [ ] 17. feat(ai): add structured output schema for recommendations
-- [ ] 18. feat(ai): add tolerant JSON extraction and repair
-- [ ] 19. feat(ai): add validate-and-repair structured generation
-- [ ] 20. feat(ai): add PII redaction guardrail
-- [ ] 21. feat(ai): add prompt-injection guardrail for untrusted fields
-- [ ] 22. feat(ai): add output sanitization guardrail for reasoning
-- [ ] 23. feat(ai): add policy guardrail cross-checking ML signals
-- [ ] 24. feat(ai): add deterministic rule-based fallback recommender
-- [ ] 25. feat(ai): add AI run metadata audit trail
-- [ ] 26. feat(ai): add ClaimReviewAI facade orchestrating all layers
-- [ ] 27. refactor(agent): route LangGraph nodes through ClaimReviewAI
-- [ ] 28. feat(api): expose and persist AI run metadata on analyses
+- [x] 7. feat(ai): scaffold ai_platform package with error taxonomy
+- [x] 8. feat(ai): add environment-driven AI settings
+- [x] 9. feat(ai): add async retry with exponential backoff and full jitter
+- [x] 10. feat(ai): add timeout guard for LLM calls
+- [x] 11. feat(ai): add circuit breaker
+- [x] 12. feat(ai): define LLM provider protocol and response types
+- [x] 13. feat(ai): add Groq provider adapter with error mapping
+- [x] 14. feat(ai): add scripted provider for tests and offline runs
+- [x] 15. feat(ai): add resilient LLM client with model fallback chain
+- [x] 16. feat(ai): add versioned prompt registry with hardened prompts
+- [x] 17. feat(ai): add structured output schema for recommendations
+- [x] 18. feat(ai): add tolerant JSON extraction and repair
+- [x] 19. feat(ai): add validate-and-repair structured generation
+- [x] 20. feat(ai): add PII redaction guardrail
+- [x] 21. feat(ai): add prompt-injection guardrail for untrusted fields
+- [x] 22. feat(ai): add output sanitization guardrail for reasoning
+- [x] 23. feat(ai): add policy guardrail cross-checking ML signals
+- [x] 24. feat(ai): add deterministic rule-based fallback recommender
+- [x] 25. feat(ai): add AI run metadata audit trail
+- [x] 26. feat(ai): add ClaimReviewAI facade orchestrating all layers
+- [x] 27. refactor(agent): route LangGraph nodes through ClaimReviewAI
+- [x] 28. feat(api): expose and persist AI run metadata on analyses
 
 ## Phase 2: Production basics
 

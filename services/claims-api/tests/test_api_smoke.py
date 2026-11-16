@@ -64,15 +64,20 @@ def test_provider_cluster_and_timeseries():
     assert {"date", "daily_paid_total", "is_anomaly"} <= set(points[0].keys())
 
 
-def test_analyze_requires_or_uses_groq():
-    """Analyze either succeeds (key present) or fails cleanly (key absent)."""
+def test_analyze_returns_decision_with_ai_metadata():
+    """Analyze always answers: via the LLM when a key is set, via the rule engine otherwise."""
     first = requests.get(f"{BASE_URL}/claims?limit=1", timeout=5).json()[0]
     r = requests.post(f"{BASE_URL}/claims/{first['claim_id']}/analyze", timeout=60)
-    assert r.status_code in (200, 500)
-    if r.status_code == 200:
-        body = r.json()
-        assert body["recommendation"] in {"approve", "flag_for_review", "request_more_data"}
-        assert "signals" in body and "reasoning" in body
+    assert r.status_code == 200
+    body = r.json()
+    assert body["recommendation"] in {"approve", "flag_for_review", "request_more_data"}
+    assert "signals" in body and "reasoning" in body
+    meta = body["ai_metadata"]
+    assert meta["decision_source"] in {"llm", "rules"}
+    assert "claim_reasoning" in meta["prompt_versions"]
+
+    stored = requests.get(f"{BASE_URL}/claims/{first['claim_id']}/analysis", timeout=5).json()
+    assert stored["ai_metadata"]["run_id"] == meta["run_id"]
 
 
 def test_upload_claims_csv_accepts_valid_rows_and_rejects_bad_provider():
