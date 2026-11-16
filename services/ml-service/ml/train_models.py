@@ -135,23 +135,31 @@ def train_clustering(claims: pd.DataFrame, providers: pd.DataFrame):
 
     agg["cluster_label"] = agg["cluster_id"].map(label_by_cluster)
 
-    providers_out = providers.merge(agg, on="provider_id", how="left")
+    # Drop columns from a previous training run so retraining is idempotent
+    # (otherwise every run adds _x/_y duplicates to providers.csv).
+    derived = [c for c in providers.columns if c in agg.columns and c != "provider_id"]
+    providers_out = providers.drop(columns=derived).merge(agg, on="provider_id", how="left")
     return providers_out, scaler, kmeans, feature_cols, label_by_cluster
 
 
+DERIVED_TIMESERIES_COLUMNS = ["anomaly_score", "is_anomaly"]
+
+
 def train_anomaly_detector(timeseries: pd.DataFrame):
-    ts = timeseries.sort_values(["provider_id", "date"]).copy()
+    ts = timeseries.drop(columns=DERIVED_TIMESERIES_COLUMNS, errors="ignore")
+    ts = ts.sort_values(["provider_id", "date"]).reset_index(drop=True)
 
-    def add_zscores(group: pd.DataFrame) -> pd.DataFrame:
-        roll_count = group["daily_claim_count"].rolling(7, min_periods=2)
-        roll_amount = group["daily_paid_total"].rolling(7, min_periods=2)
-        count_mean, count_std = roll_count.mean(), roll_count.std().replace(0, np.nan)
-        amount_mean, amount_std = roll_amount.mean(), roll_amount.std().replace(0, np.nan)
-        group["count_z"] = ((group["daily_claim_count"] - count_mean) / count_std).fillna(0)
-        group["amount_z"] = ((group["daily_paid_total"] - amount_mean) / amount_std).fillna(0)
-        return group
+    def rolling_z(column: str) -> pd.Series:
+        # groupby().transform keeps the original index and columns (provider_id
+        # included). groupby().apply drops the grouping column on pandas >= 3,
+        # which silently produced a time-series file without provider_id.
+        grouped = ts.groupby("provider_id")[column]
+        mean = grouped.transform(lambda s: s.rolling(7, min_periods=2).mean())
+        std = grouped.transform(lambda s: s.rolling(7, min_periods=2).std()).replace(0, np.nan)
+        return ((ts[column] - mean) / std).fillna(0)
 
-    ts = ts.groupby("provider_id", group_keys=False).apply(add_zscores)
+    ts["count_z"] = rolling_z("daily_claim_count")
+    ts["amount_z"] = rolling_z("daily_paid_total")
 
     features = ts[["count_z", "amount_z"]]
     model = IsolationForest(contamination=0.05, random_state=42)

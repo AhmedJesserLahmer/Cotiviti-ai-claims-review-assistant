@@ -1,9 +1,12 @@
-import os
-
 import pytest
 
 pytest.importorskip("sklearn")
-if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "ml", "models", "classifier.joblib")):
+
+from ml import registry  # noqa: E402
+
+try:
+    registry.current_version()
+except registry.ModelNotFoundError:
     pytest.skip("models not trained yet (run: python -m ml.train_models)", allow_module_level=True)
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -21,6 +24,13 @@ def test_score_returns_both_models():
     assert body["predicted_risk_label"] in {"Low", "Medium", "High"}
     assert body["predicted_paid_amount"] >= 0
     assert abs(sum(body["risk_probabilities"].values()) - 1) < 1e-6
+    assert body["model_version"] == registry.current_version()
+
+
+def test_models_endpoint_lists_active_version():
+    body = TestClient(main.app).get("/v1/models").json()
+    assert body["active"] == registry.current_version()
+    assert any(v["active"] for v in body["versions"])
 
 
 def test_individual_endpoints_agree_with_score():
