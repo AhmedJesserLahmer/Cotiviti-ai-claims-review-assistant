@@ -34,6 +34,21 @@ services:
     ports:
       - "8000:8000"
 
+  ml-service:
+    build:
+      context: ../..
+      dockerfile: services/ml-service/Dockerfile
+    container_name: claims_poc_ml_service
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: claims_poc
+    # Internal only: reached as http://ml-service:8001.
+    expose:
+      - "8001"
+
   ai-agent:
     build:
       context: ../..
