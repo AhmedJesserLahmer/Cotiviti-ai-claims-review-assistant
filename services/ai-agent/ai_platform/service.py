@@ -28,7 +28,8 @@ from ai_platform.guardrails.base import GuardrailFinding
 from ai_platform.guardrails.injection import sanitize_payload
 from ai_platform.guardrails.output import sanitize_reasoning
 from ai_platform.guardrails.pii import redact_payload
-from ai_platform.guardrails.policy import PolicyDecision, PolicyThresholds, enforce_policy
+from ai_platform.guardrails.policy import PolicyDecision, PolicyThresholds, PolicyViolation, enforce_policy
+from ai_platform.judge import audit_approval
 from ai_platform.prompts import CLAIM_REASONING, CLAIM_RECOMMENDATION
 from ai_platform.validation.schemas import RecommendationOutput, schema_hint
 from ai_platform.validation.structured import generate_structured
@@ -124,7 +125,8 @@ class ClaimReviewAI:
         run: AIRunMetadata,
     ) -> RecommendationOutput:
         output = await self._llm_or_rules(claim, signals, reasoning, allow_more_data, run)
-        decision = self._apply_policy(output, claim, signals, allow_more_data, run)
+        extra = await self._extra_checks(output, reasoning, signals, run)
+        decision = self._apply_policy(output, claim, signals, allow_more_data, run, extra)
 
         run.confidence = decision.output.confidence
         run.key_factors = list(decision.output.key_factors)
@@ -177,13 +179,37 @@ class ClaimReviewAI:
         await self.cache.set(key, output.model_dump_json(), self.settings.cache_ttl_s)
         return output
 
+    async def _extra_checks(
+        self, output: RecommendationOutput, reasoning: str, signals: dict, run: AIRunMetadata
+    ) -> list[PolicyViolation]:
+        """Escalate-only checks that need the LLM output (judge, ...)."""
+        violations: list[PolicyViolation] = []
+        if (
+            self.settings.judge_enabled
+            and run.decision_source == "llm"
+            and output.recommendation == "approve"
+            and not self.client.is_empty
+        ):
+            violations += await audit_approval(
+                self.client, output=output, reasoning=reasoning, signals=signals, run=run,
+                fail_closed=self.settings.judge_fail_closed, max_tokens=self.settings.max_output_tokens,
+            )
+        return violations
+
     def _apply_policy(
-        self, output: RecommendationOutput, claim: dict, signals: dict, allow_more_data: bool, run: AIRunMetadata
+        self,
+        output: RecommendationOutput,
+        claim: dict,
+        signals: dict,
+        allow_more_data: bool,
+        run: AIRunMetadata,
+        extra: list[PolicyViolation] | None = None,
     ) -> PolicyDecision:
         if self.settings.policy_enforcement_enabled:
             decision = enforce_policy(
                 output, claim, signals, self.thresholds,
                 allow_more_data=allow_more_data, injection_detected=run.injection_detected,
+                extra_violations=extra,
             )
         else:
             # Even with policy off, the data budget must hold or the agent could loop.

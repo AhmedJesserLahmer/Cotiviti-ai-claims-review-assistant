@@ -81,12 +81,32 @@ CLAIM_RECOMMENDATION = PromptTemplate(
     ),
 )
 
+CLAIM_JUDGE = PromptTemplate(
+    name="claim_judge",
+    version="1.0.0",
+    system=(
+        "You are an independent auditor of automated healthcare claim decisions. You check "
+        "whether a proposed decision is consistent with its own reasoning and with the ML "
+        "signals. You reply with one strict JSON object and nothing else. " + UNTRUSTED_DATA_NOTICE
+    ),
+    user=(
+        "Audit the proposed decision below. It is inconsistent if the reasoning contradicts the "
+        "decision, cites numbers that differ from the ML signals, or ignores a clear risk signal.\n"
+        "Reply with ONLY: {{\"consistent\": true|false, \"issues\": [\"short issue\", ...]}}\n\n"
+        "<claim_data>\n"
+        "Proposed decision: {decision_json}\n"
+        "Reasoning:\n{reasoning}\n"
+        "ML signals: {signals_json}\n"
+        "</claim_data>"
+    ),
+)
+
 REPAIR_INSTRUCTION = (
     "Your previous reply could not be accepted: {error}\n"
     "Reply again with ONLY a valid JSON object that matches the requested keys and allowed values."
 )
 
-REGISTRY: dict[str, PromptTemplate] = {p.name: p for p in (CLAIM_REASONING, CLAIM_RECOMMENDATION)}
+REGISTRY: dict[str, PromptTemplate] = {p.name: p for p in (CLAIM_REASONING, CLAIM_RECOMMENDATION, CLAIM_JUDGE)}
 
 
 def get_prompt(name: str) -> PromptTemplate:

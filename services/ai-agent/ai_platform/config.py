@@ -55,6 +55,12 @@ class AISettings(BaseSettings):
     # "model=in/out;..." USD per 1M tokens, overriding ai_platform.pricing defaults.
     model_prices: str = ""
 
+    # --- LLM-as-judge ---------------------------------------------------------------
+    # Second LLM call auditing every LLM approval (costs one extra call per approval).
+    judge_enabled: bool = False
+    # When the judge itself fails: false = keep the approval (warn), true = escalate.
+    judge_fail_closed: bool = False
+
     # --- caching ---------------------------------------------------------------
     cache_enabled: bool = True
     cache_ttl_s: int = Field(default=3600, ge=1)

@@ -123,8 +123,11 @@ def enforce_policy(
     *,
     allow_more_data: bool = True,
     injection_detected: bool = False,
+    extra_violations: list[PolicyViolation] | None = None,
 ) -> PolicyDecision:
     violations = evaluate_signals(claim, signals, thresholds, injection_detected=injection_detected)
+    # Checks computed outside this module (LLM judge, grounding, calibration).
+    violations.extend(extra_violations or [])
     blocking = [v for v in violations if v.severity == "block"]
 
     if output.recommendation == "request_more_data" and not allow_more_data:

@@ -58,6 +58,7 @@ class AIRunMetadata(BaseModel):
     confidence: float | None = None
     key_factors: list[str] = Field(default_factory=list)
     total_latency_ms: float | None = None
+    judge: dict | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     estimated_cost_usd: float = 0.0

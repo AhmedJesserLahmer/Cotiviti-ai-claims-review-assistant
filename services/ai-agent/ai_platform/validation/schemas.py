@@ -62,3 +62,21 @@ def schema_hint() -> str:
         '{"recommendation": "approve" | "flag_for_review" | "request_more_data", '
         '"summary": "<one sentence>", "confidence": <0..1>, "key_factors": ["..."]}'
     )
+
+
+class JudgeOutput(BaseModel):
+    """Verdict of the LLM-as-judge consistency check."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    consistent: bool
+    issues: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator("issues", mode="before")
+    @classmethod
+    def _clean_issues(cls, value):
+        if isinstance(value, str):
+            value = [value]
+        if isinstance(value, list):
+            return [str(v).strip()[:200] for v in value if str(v).strip()][:5]
+        return value
