@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from core.analysis import proxy_analysis_stream, request_analysis
 from core.audit import get_audit_log
+from core.config import settings
 from core.limits import analyze_limit, bulk_limit
 from core.security import Principal, get_principal
 from db.mongo import db
@@ -24,6 +25,19 @@ REQUIRED_UPLOAD_COLUMNS = [
     "billed_amount",
     "age",
 ]
+
+
+# Free-text columns that are stored and may later be exported to spreadsheets.
+TEXT_COLUMNS = (
+    "claim_id", "patient_id", "provider_id", "procedure_code", "diagnosis_code", "treatment_type", "status", "claim_date",
+)
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def is_formula_like(value) -> bool:
+    """Cells starting with these characters are executed as formulas by Excel/Sheets
+    when the data is exported (CSV/formula injection, OWASP)."""
+    return isinstance(value, str) and value.startswith(_FORMULA_PREFIXES)
 
 
 def _clean_str(value) -> str:
@@ -104,7 +118,13 @@ async def upload_claims(
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a .csv file")
 
-    raw = await file.read()
+    # Read at most one byte past the limit so oversized uploads are rejected
+    # without loading them fully into memory.
+    raw = await file.read(settings.max_upload_bytes + 1)
+    if len(raw) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413, detail=f"File exceeds {settings.max_upload_bytes // 1_000_000} MB upload limit"
+        )
     try:
         rows = pd.read_csv(io.BytesIO(raw))
     except Exception as exc:  # noqa: BLE001 - surface parse errors to the caller
@@ -112,6 +132,8 @@ async def upload_claims(
 
     if rows.empty:
         raise HTTPException(status_code=400, detail="CSV file has no rows")
+    if len(rows) > settings.max_upload_rows:
+        raise HTTPException(status_code=413, detail=f"At most {settings.max_upload_rows} rows per upload")
 
     missing = [col for col in REQUIRED_UPLOAD_COLUMNS if col not in rows.columns]
     if missing:
@@ -133,6 +155,13 @@ async def upload_claims(
 
     for idx, row in rows.iterrows():
         row_num = idx + 2  # +1 for header row, +1 for 0-index -> 1-index
+
+        formula_column = next((c for c in TEXT_COLUMNS if is_formula_like(row.get(c))), None)
+        if formula_column:
+            errors.append(ClaimUploadError(
+                row=row_num, reason=f"'{formula_column}' looks like a spreadsheet formula (CSV injection)"
+            ))
+            continue
 
         provider_id = _clean_str(row.get("provider_id"))
         if provider_id not in provider_ids:

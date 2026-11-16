@@ -14,6 +14,9 @@ class Settings(ServiceSettings):
     # Parallel analyses per job (bounded so a big upload cannot flood ai-agent / the LLM).
     analysis_concurrency: int = 4
     max_job_claims: int = 500
+    # CSV upload limits.
+    max_upload_bytes: int = 5_000_000
+    max_upload_rows: int = 5_000
     # Per-client limits on endpoints that trigger LLM work.
     rate_limit_enabled: bool = True
     rate_limit_analyze_per_minute: int = 30
