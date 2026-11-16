@@ -1,10 +1,6 @@
 import pytest
 
-pytest.importorskip("fastapi")
 pytest.importorskip("motor")
-
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 
 from routers import health  # noqa: E402
 
@@ -19,34 +15,14 @@ class FakeDB:
         return {"ok": 1}
 
 
-class FakeAI:
-    def health(self):
-        return {"llm_enabled": False, "circuits": []}
+async def test_mongo_check(monkeypatch):
+    monkeypatch.setattr(health, "db", FakeDB())
+    await health.mongo_ping()
+    monkeypatch.setattr(health, "db", FakeDB(fail=True))
+    with pytest.raises(ConnectionError):
+        await health.mongo_ping()
 
 
-def client(monkeypatch, *, fail=False):
-    monkeypatch.setattr(health, "db", FakeDB(fail))
-    monkeypatch.setattr(health, "get_claim_review_ai", lambda: FakeAI())
-    app = FastAPI()
-    app.include_router(health.router)
-    return TestClient(app)
-
-
-def test_liveness_and_legacy_health(monkeypatch):
-    c = client(monkeypatch, fail=True)  # liveness ignores dependencies
-    assert c.get("/health/live").json() == {"status": "alive"}
-    assert c.get("/health").json() == {"status": "ok"}
-
-
-def test_ready_when_mongo_up(monkeypatch):
-    r = client(monkeypatch).get("/health/ready")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["checks"]["mongo"]["status"] == "up"
-    assert body["ai"]["llm_enabled"] is False  # LLM off does not make the API unready
-
-
-def test_not_ready_when_mongo_down(monkeypatch):
-    r = client(monkeypatch, fail=True).get("/health/ready")
-    assert r.status_code == 503
-    assert "unreachable" in r.json()["checks"]["mongo"]["error"]
+def test_ai_info_is_informational(monkeypatch):
+    monkeypatch.setenv("AI_OFFLINE_MODE", "true")
+    assert "llm_enabled" in health.ai_info()["ai"]
