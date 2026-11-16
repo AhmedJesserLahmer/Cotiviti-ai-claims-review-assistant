@@ -1,0 +1,63 @@
+{{- if and .Values.training.enabled .Values.mlService.enabled .Values.mlService.models.persistence.enabled }}
+{{- $component := "training" }}
+{{- $ml := include "claims-review.componentName" (dict "root" . "component" "ml-service") }}
+# Retrains the models into a new immutable registry version on the shared volume.
+# New versions are not activated unless training.activate=true: review the
+# manifest metrics, then POST /v1/models/{version}/activate on ml-service.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  schedule: {{ .Values.training.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "claims-review.selectorLabels" (dict "root" . "component" $component) | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            {{- include "claims-review.podSecurityContext" . | nindent 12 }}
+            fsGroup: 10001
+          containers:
+            - name: train
+              image: {{ include "claims-review.image" (dict "root" . "values" .Values.mlService) }}
+              imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+              command: ["sh", "-c", "python -m data_gen.generate_data && python -m ml.train_models"]
+              env:
+                - name: MODELS_DIR
+                  value: /models
+                - name: DATA_DIR
+                  value: /tmp/data
+                {{- if not .Values.training.activate }}
+                - name: TRAINING_ACTIVATE
+                  value: "false"
+                {{- end }}
+              resources:
+                {{- toYaml .Values.training.resources | nindent 16 }}
+              securityContext:
+                {{- include "claims-review.containerSecurityContext" . | nindent 16 }}
+              volumeMounts:
+                - name: models
+                  mountPath: /models
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: models
+              persistentVolumeClaim:
+                claimName: {{ $ml }}-models
+            - name: tmp
+              emptyDir:
+                sizeLimit: 1Gi
+{{- end }}

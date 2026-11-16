@@ -10,7 +10,7 @@ import pandas as pd
 
 from db.mongo import db
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 
 COLLECTIONS = {
     "providers.csv": "providers",
