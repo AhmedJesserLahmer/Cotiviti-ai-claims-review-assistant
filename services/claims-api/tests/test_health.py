@@ -23,6 +23,6 @@ async def test_mongo_check(monkeypatch):
         await health.mongo_ping()
 
 
-def test_ai_info_is_informational(monkeypatch):
-    monkeypatch.setenv("AI_OFFLINE_MODE", "true")
-    assert "llm_enabled" in health.ai_info()["ai"]
+def test_dependency_info_reports_ai_agent():
+    deps = health.dependency_info()["dependencies"]
+    assert deps[0]["service"] == "ai-agent" and deps[0]["state"] == "closed"

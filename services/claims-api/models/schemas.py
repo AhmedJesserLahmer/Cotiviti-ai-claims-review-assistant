@@ -1,8 +1,6 @@
-from typing import Any, Literal
-
 from pydantic import BaseModel
 
-from ai_platform.audit import AIRunMetadata
+from claims_common.contracts import AnalysisResult, MLSignals, SeedResponse
 
 
 class ClaimOut(BaseModel):
@@ -19,29 +17,6 @@ class ClaimOut(BaseModel):
     prior_claims_count: int
     status: str
     risk_label: str
-
-
-class MLSignals(BaseModel):
-    predicted_risk_label: str
-    risk_probabilities: dict[str, float]
-    predicted_paid_amount: float
-    provider_cluster_id: int
-    provider_cluster_label: str
-    anomaly_flagged_days: int
-    anomaly_recent_score: float
-    is_recent_anomaly: bool
-
-
-class AnalysisResult(BaseModel):
-    claim_id: str
-    signals: MLSignals
-    reasoning: str
-    recommendation: Literal["approve", "flag_for_review", "request_more_data"]
-    recommendation_summary: str
-    loops: int
-    # Audit trail (models tried, fallbacks, guardrails, policy overrides). Optional so
-    # analyses stored before the AI reliability layer still validate.
-    ai_metadata: AIRunMetadata | None = None
 
 
 class TimeseriesPoint(BaseModel):
@@ -62,11 +37,6 @@ class ProviderClusterOut(BaseModel):
     avg_length_of_stay: float
 
 
-class SeedResponse(BaseModel):
-    status: str
-    counts: dict[str, int]
-
-
 class ClaimUploadError(BaseModel):
     row: int
     reason: str
@@ -78,3 +48,9 @@ class ClaimUploadResponse(BaseModel):
     errors: list[ClaimUploadError]
     analyses: list[AnalysisResult] | None = None
     analysis_errors: list[ClaimUploadError] | None = None
+
+
+__all__ = [
+    "AnalysisResult", "ClaimOut", "ClaimUploadError", "ClaimUploadResponse", "MLSignals",
+    "ProviderClusterOut", "SeedResponse", "TimeseriesPoint",
+]

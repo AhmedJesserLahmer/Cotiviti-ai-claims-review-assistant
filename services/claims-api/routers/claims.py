@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from agent.graph import analyze_claim
+from core.analysis import request_analysis
 from db.mongo import db
 from models.schemas import AnalysisResult, ClaimOut, ClaimUploadError, ClaimUploadResponse
 
@@ -53,7 +53,7 @@ async def analyze(claim_id: str):
     claim = await db["claims"].find_one({"claim_id": claim_id}, {"_id": 0})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return await analyze_claim(claim_id)
+    return await request_analysis(claim_id)
 
 
 @router.get("/{claim_id}/analysis", response_model=AnalysisResult)
@@ -178,9 +178,9 @@ async def upload_claims(file: UploadFile = File(...), auto_analyze: bool = Form(
         analyses, analysis_errors = [], []
         for claim_id in inserted_claim_ids:
             try:
-                analyses.append(await analyze_claim(claim_id))
-            except Exception as exc:  # noqa: BLE001 - one bad claim shouldn't kill the batch
-                analysis_errors.append(ClaimUploadError(row=0, reason=f"{claim_id}: {exc}"))
+                analyses.append(await request_analysis(claim_id))
+            except HTTPException as exc:  # one bad claim shouldn't kill the batch
+                analysis_errors.append(ClaimUploadError(row=0, reason=f"{claim_id}: {exc.detail}"))
 
     return ClaimUploadResponse(
         inserted_count=len(inserted_claim_ids),

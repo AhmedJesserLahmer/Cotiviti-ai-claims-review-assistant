@@ -16,10 +16,6 @@ RUN pip install -r requirements.txt /opt/claims-common
 
 COPY services/claims-api/ .
 
-# Bake synthetic data + trained models into the image so the container is
-# self-contained and reproducible (seeding into Mongo happens at runtime).
-RUN python -m data_gen.generate_data && python -m ml.train_models
-
 # Run as an unprivileged user; the app only needs read access to /app.
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app \
