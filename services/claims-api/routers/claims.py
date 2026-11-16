@@ -4,10 +4,12 @@ from datetime import date
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 
 from core.analysis import request_analysis
 from db.mongo import db
 from models.schemas import AnalysisResult, ClaimOut, ClaimUploadError, ClaimUploadResponse
+from routers.jobs import start_analysis_job
 
 router = APIRouter(prefix="/claims", tags=["claims"])
 
@@ -65,7 +67,11 @@ async def get_analysis(claim_id: str):
 
 
 @router.post("/upload", response_model=ClaimUploadResponse)
-async def upload_claims(file: UploadFile = File(...), auto_analyze: bool = Form(False)):
+async def upload_claims(
+    file: UploadFile = File(...),
+    auto_analyze: bool = Form(False),
+    async_analysis: bool = Form(False),
+):
     """Bulk-ingest one or many claims from a CSV file.
 
     Required columns: provider_id, procedure_code, diagnosis_code, treatment_type,
@@ -73,6 +79,9 @@ async def upload_claims(file: UploadFile = File(...), auto_analyze: bool = Form(
     Optional columns: claim_id, patient_id, paid_amount, claim_date, length_of_stay,
     prior_claims_count, status. Unrecognized provider_ids are rejected per-row so the
     rest of the batch still succeeds.
+
+    With ``auto_analyze`` the inserted claims are analyzed: inline by default, or as
+    a background job when ``async_analysis`` is set (202 Accepted + ``job_id``).
     """
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a .csv file")
@@ -171,6 +180,13 @@ async def upload_claims(file: UploadFile = File(...), auto_analyze: bool = Form(
         await db["patients"].insert_many(patients_to_insert)
     if claims_to_insert:
         await db["claims"].insert_many(claims_to_insert)
+
+    if auto_analyze and async_analysis and inserted_claim_ids:
+        job = await start_analysis_job(inserted_claim_ids, source="upload")
+        accepted = ClaimUploadResponse(
+            inserted_count=len(inserted_claim_ids), claim_ids=inserted_claim_ids, errors=errors, job_id=job["job_id"]
+        )
+        return JSONResponse(accepted.model_dump(), status_code=202, headers={"Location": f"/jobs/{job['job_id']}"})
 
     analyses: list[AnalysisResult] | None = None
     analysis_errors: list[ClaimUploadError] | None = None

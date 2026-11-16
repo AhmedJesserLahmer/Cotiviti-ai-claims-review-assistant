@@ -11,6 +11,9 @@ class Settings(ServiceSettings):
     ml_service_url: str = "http://localhost:8001"
     # An analysis runs ML + up to four LLM calls (with retries); allow for that.
     ai_agent_timeout_s: float = 90.0
+    # Parallel analyses per job (bounded so a big upload cannot flood ai-agent / the LLM).
+    analysis_concurrency: int = 4
+    max_job_claims: int = 500
 
 
 settings = Settings()

@@ -48,6 +48,8 @@ class ClaimUploadResponse(BaseModel):
     errors: list[ClaimUploadError]
     analyses: list[AnalysisResult] | None = None
     analysis_errors: list[ClaimUploadError] | None = None
+    # Set when the upload was analyzed asynchronously (poll GET /jobs/{job_id}).
+    job_id: str | None = None
 
 
 __all__ = [
