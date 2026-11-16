@@ -112,3 +112,12 @@ export interface ClaimUploadResponse {
   analyses: AnalysisResult[] | null;
   analysis_errors: ClaimUploadError[] | null;
 }
+
+export type FinalDecision = "approve" | "deny" | "flag_for_review" | "request_more_data";
+
+export interface ReviewerFeedbackIn {
+  verdict: "agree" | "override";
+  final_decision: FinalDecision;
+  reviewer: string;
+  comment?: string;
+}

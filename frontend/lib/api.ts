@@ -3,6 +3,7 @@ import {
   Claim,
   ClaimUploadResponse,
   Provider,
+  ReviewerFeedbackIn,
   TimeseriesPoint,
 } from "./types";
 
@@ -42,6 +43,15 @@ export const api = {
   listProviders: () => request<Provider[]>("/providers"),
   getProviderTimeseries: (providerId: string) =>
     request<TimeseriesPoint[]>(`/providers/${providerId}/timeseries?days=90`),
+  submitFeedback: (claimId: string, feedback: ReviewerFeedbackIn) =>
+    request<ReviewerFeedbackIn & { claim_id: string; created_at: string }>(
+      `/claims/${encodeURIComponent(claimId)}/feedback`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(feedback),
+      },
+    ),
   uploadClaims: (file: File, autoAnalyze: boolean) => {
     const formData = new FormData();
     formData.append("file", file);

@@ -7,6 +7,7 @@ import { AnalysisResult } from "@/lib/types";
 import SignalsPanel from "./SignalsPanel";
 import ReasoningNarrative from "./ReasoningNarrative";
 import AIReliabilityPanel from "./AIReliabilityPanel";
+import ReviewerFeedback from "./ReviewerFeedback";
 
 const STAGE_LABELS: Record<string, string> = {
   fetch_claim_context: "Loading claim, patient and provider history",
@@ -136,6 +137,7 @@ export default function ClaimAnalysisSection({
           <SignalsPanel signals={analysis.signals} />
           <ReasoningNarrative analysis={analysis} />
           {analysis.ai_metadata && <AIReliabilityPanel meta={analysis.ai_metadata} />}
+          <ReviewerFeedback key={analysis.ai_metadata?.run_id ?? "legacy"} claimId={claimId} analysis={analysis} />
         </>
       )}
     </div>
