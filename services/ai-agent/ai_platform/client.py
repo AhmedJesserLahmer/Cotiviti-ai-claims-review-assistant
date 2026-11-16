@@ -13,6 +13,7 @@ how to degrade (see ``ai_platform.fallback``).
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -57,11 +58,13 @@ class ResilientLLMClient:
         timeout_s: float = 20.0,
         breaker_factory: Callable[[str], CircuitBreaker] | None = None,
         sleep: SleepFn | None = None,
+        hedge_after_s: float = 0.0,
     ):
         factory = breaker_factory or (lambda name: CircuitBreaker(name))
         self.slots = [ProviderSlot(p, factory(f"{p.name}/{p.model}")) for p in providers]
         self.retry_policy = retry_policy or RetryPolicy()
         self.timeout_s = timeout_s
+        self.hedge_after_s = hedge_after_s
         self._sleep = sleep
 
     @property
@@ -79,63 +82,108 @@ class ResilientLLMClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        kwargs = {"messages": messages, "recorder": recorder, "temperature": temperature, "max_tokens": max_tokens}
+        if self.hedge_after_s > 0 and len(self.slots) > 1:
+            return await self._hedged(**kwargs)
+        return await self._sequential(self.slots, **kwargs)
+
+    async def _sequential(self, slots: list[ProviderSlot], **kwargs) -> LLMResponse:
         errors: list[Exception] = []
-        for slot in self.slots:
-            provider = slot.provider
-            if not slot.breaker.allow_request():
-                err = CircuitOpenError(f"circuit open for {slot.label}")
-                errors.append(err)
-                if recorder:
-                    recorder.record_attempt(
-                        provider=provider.name, model=provider.model, attempt=0,
-                        outcome="circuit_open", latency_ms=0.0, error=str(err),
-                    )
-                continue
-
-            attempt_no = 0
-
-            async def call_once(slot: ProviderSlot = slot) -> LLMResponse:
-                nonlocal attempt_no
-                attempt_no += 1
-                started = time.perf_counter()
-                try:
-                    response = await with_timeout(
-                        slot.provider.generate(messages, temperature=temperature, max_tokens=max_tokens),
-                        self.timeout_s,
-                        provider=slot.provider.name,
-                        model=slot.provider.model,
-                    )
-                except Exception as exc:
-                    if recorder:
-                        recorder.record_attempt(
-                            provider=slot.provider.name, model=slot.provider.model, attempt=attempt_no,
-                            outcome="error", latency_ms=_elapsed_ms(started), error=str(exc),
-                        )
-                    raise
-                if recorder:
-                    recorder.record_attempt(
-                        provider=slot.provider.name, model=slot.provider.model, attempt=attempt_no,
-                        outcome="success", latency_ms=_elapsed_ms(started),
-                    )
-                    if hasattr(recorder, "record_usage"):
-                        recorder.record_usage(
-                            model=response.model,
-                            prompt_tokens=response.usage.prompt_tokens,
-                            completion_tokens=response.usage.completion_tokens,
-                        )
-                return response
-
-            kwargs = {"sleep": self._sleep} if self._sleep else {}
+        for slot in slots:
             try:
-                response = await retry_async(call_once, self.retry_policy, should_retry=is_retryable, **kwargs)
-            except Exception as exc:
-                slot.breaker.record_failure()
+                return await self._try_slot(slot, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - collected and re-raised as an aggregate
                 errors.append(exc)
-                continue
-            slot.breaker.record_success()
+        raise AllProvidersFailedError(errors)
+
+    async def _hedged(self, **kwargs) -> LLMResponse:
+        """Primary first; if it is still running after ``hedge_after_s``, race the rest
+        of the chain against it and keep whichever succeeds first."""
+        primary = asyncio.create_task(self._sequential(self.slots[:1], **kwargs))
+        done, _ = await asyncio.wait({primary}, timeout=self.hedge_after_s)
+        if done and not primary.exception():
+            return primary.result()
+
+        backup = asyncio.create_task(self._sequential(self.slots[1:], **kwargs))
+        pending = {primary, backup} - done
+        errors: list[Exception] = []
+        if primary in done:
+            errors.extend(getattr(primary.exception(), "errors", [primary.exception()]))
+        while pending:
+            finished, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in finished:
+                if task.exception() is None:
+                    for other in pending:
+                        other.cancel()
+                    return task.result()
+                errors.extend(getattr(task.exception(), "errors", [task.exception()]))
+        raise AllProvidersFailedError(errors)
+
+    async def _try_slot(
+        self,
+        slot: ProviderSlot,
+        *,
+        messages: list[ChatMessage],
+        recorder: AttemptRecorder | None,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> LLMResponse:
+        provider = slot.provider
+        if not slot.breaker.allow_request():
+            err = CircuitOpenError(f"circuit open for {slot.label}")
+            if recorder:
+                recorder.record_attempt(
+                    provider=provider.name, model=provider.model, attempt=0,
+                    outcome="circuit_open", latency_ms=0.0, error=str(err),
+                )
+            raise err
+
+        attempt_no = 0
+
+        async def call_once() -> LLMResponse:
+            nonlocal attempt_no
+            attempt_no += 1
+            started = time.perf_counter()
+            try:
+                response = await with_timeout(
+                    provider.generate(messages, temperature=temperature, max_tokens=max_tokens),
+                    self.timeout_s,
+                    provider=provider.name,
+                    model=provider.model,
+                )
+            except asyncio.CancelledError:
+                # Lost a hedge race: not a provider failure, do not record or trip the breaker.
+                raise
+            except Exception as exc:
+                if recorder:
+                    recorder.record_attempt(
+                        provider=provider.name, model=provider.model, attempt=attempt_no,
+                        outcome="error", latency_ms=_elapsed_ms(started), error=str(exc),
+                    )
+                raise
+            if recorder:
+                recorder.record_attempt(
+                    provider=provider.name, model=provider.model, attempt=attempt_no,
+                    outcome="success", latency_ms=_elapsed_ms(started),
+                )
+                if hasattr(recorder, "record_usage"):
+                    recorder.record_usage(
+                        model=response.model,
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                    )
             return response
 
-        raise AllProvidersFailedError(errors)
+        retry_kwargs = {"sleep": self._sleep} if self._sleep else {}
+        try:
+            response = await retry_async(call_once, self.retry_policy, should_retry=is_retryable, **retry_kwargs)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            slot.breaker.record_failure()
+            raise
+        slot.breaker.record_success()
+        return response
 
 
 def _elapsed_ms(started: float) -> float:
@@ -180,6 +228,7 @@ def build_client(settings) -> ResilientLLMClient:
             max_delay_s=settings.backoff_max_s,
         ),
         timeout_s=settings.request_timeout_s,
+        hedge_after_s=settings.hedge_after_s,
         breaker_factory=lambda name: CircuitBreaker(
             name,
             failure_threshold=settings.circuit_failure_threshold,

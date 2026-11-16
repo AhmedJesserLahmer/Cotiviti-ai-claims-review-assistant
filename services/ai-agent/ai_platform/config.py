@@ -42,6 +42,9 @@ class AISettings(BaseSettings):
     max_retries: int = Field(default=2, ge=0, le=10)
     backoff_base_s: float = Field(default=0.5, ge=0)
     backoff_max_s: float = Field(default=8.0, ge=0)
+    # Start the fallback chain in parallel when the primary has not answered after this
+    # many seconds (0 disables hedging). Trades extra tokens for lower tail latency.
+    hedge_after_s: float = Field(default=0.0, ge=0.0)
     circuit_failure_threshold: int = Field(default=5, ge=1)
     circuit_recovery_s: float = Field(default=30.0, gt=0)
 
