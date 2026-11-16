@@ -11,7 +11,7 @@ WORKDIR /app
 
 COPY libs/python/claims-common /opt/claims-common
 COPY services/ai-agent/requirements.txt .
-RUN pip install -r requirements.txt /opt/claims-common
+RUN pip install -r requirements.txt "/opt/claims-common[otel,redis]"
 
 COPY services/ai-agent/ .
 
