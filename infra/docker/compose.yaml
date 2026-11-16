@@ -32,6 +32,24 @@ services:
     ports:
       - "8000:8000"
 
+  ai-agent:
+    build:
+      context: ../..
+      dockerfile: services/ai-agent/Dockerfile
+    container_name: claims_poc_ai_agent
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: claims_poc
+    # Internal only: no published port, reached as http://ai-agent:8002.
+    expose:
+      - "8002"
+
   frontend:
     build:
       context: ../../frontend
