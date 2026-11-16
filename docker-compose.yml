@@ -13,7 +13,7 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build: ./services/claims-api
     container_name: claims_poc_backend
     depends_on:
       mongo:

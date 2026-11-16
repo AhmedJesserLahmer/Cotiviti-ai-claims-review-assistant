@@ -1,13 +1,13 @@
-# Env files (root .env is used by docker-compose, backend/.env by local uvicorn runs)
+# Env files (root .env is used by docker-compose, services/claims-api/.env by local uvicorn runs)
 .env
-backend/.env
+services/claims-api/.env
 
 # Python
-backend/venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/data/
-backend/ml/models/*.joblib
+services/claims-api/venv/
+services/claims-api/__pycache__/
+services/claims-api/**/__pycache__/
+services/claims-api/data/
+services/claims-api/ml/models/*.joblib
 
 # Node / Next.js
 frontend/node_modules/
