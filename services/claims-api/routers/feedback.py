@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from core.audit import get_audit_log
 from core.security import Principal, get_principal
 from db.mongo import db
 
@@ -62,6 +63,12 @@ async def submit_feedback(claim_id: str, body: FeedbackIn, principal: Principal 
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db["claim_feedback"].insert_one(dict(record))
+    await get_audit_log().append(
+        "review.feedback",
+        actor=record["reviewer"],
+        subject=claim_id,
+        data={k: record[k] for k in ("verdict", "final_decision", "ai_recommendation", "ai_run_id")},
+    )
     return record
 
 

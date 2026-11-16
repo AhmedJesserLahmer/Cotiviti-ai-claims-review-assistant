@@ -23,6 +23,7 @@ from ai_platform.service import get_claim_review_ai
 from claims_common.contracts import ScoreRequest, ScoreResponse
 from claims_common.http import ServiceUnavailableError
 from claims_common.tracing import set_span_attributes, span
+from core.audit import get_audit_log
 from core.clients import get_ml_service
 from db.mongo import db
 
@@ -162,6 +163,22 @@ async def persist_result(state: AgentState) -> AgentState:
     }
     await db["claim_analyses"].update_one(
         {"claim_id": state["claim_id"]}, {"$set": doc}, upsert=True
+    )
+    await get_audit_log().append(
+        "ai.decision",
+        actor="ai-agent",
+        subject=state["claim_id"],
+        data={
+            "run_id": run.run_id,
+            "recommendation": state["recommendation"],
+            "decision_source": run.decision_source,
+            "model": run.model_used,
+            "prompt_versions": run.prompt_versions,
+            "policy_override": run.recommendation_overridden,
+            "original_recommendation": run.original_recommendation,
+            "policy_violations": run.policy_violations,
+            "ml_model_version": state["signals"].get("model_version"),
+        },
     )
     record_run(run, state["recommendation"], get_claim_review_ai().client.health())
     log.info(

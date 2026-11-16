@@ -101,3 +101,12 @@ groups:
         annotations:
           summary: ">10% of scored claims are unlike the training data (data drift?)"
           runbook_url: docs/runbooks/model-regression.md
+
+  - name: claims-audit
+    rules:
+      - alert: AuditLogWriteFailures
+        expr: sum(increase(audit_write_failures_total[10m])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: Audit log entries are failing to write (decisions are not being recorded)
+          runbook_url: docs/runbooks/audit-log.md

@@ -117,3 +117,40 @@ async def test_ml_outage_without_cache_raises(monkeypatch):
     monkeypatch.setattr(graph, "db", {"claim_analyses": _Analyses(None)})
     with pytest.raises(graph.MLUnavailableError):
         await graph.run_ml_signals(dict(ML_STATE))
+
+
+async def test_persist_result_writes_a_signed_audit_entry(monkeypatch):
+    from ai_platform.audit import AIRunMetadata
+    from claims_common.audit_log import AuditLog
+    from core import audit
+
+    class Collection:
+        def __init__(self):
+            self.docs = []
+
+        async def update_one(self, *args, **kwargs):
+            return None
+
+        async def find_one_and_update(self, query, update, upsert=False, return_document=False):
+            self.docs = self.docs or [{"_id": query["_id"], "seq": 0}]
+            self.docs[0]["seq"] += 1
+            return self.docs[0]
+
+        async def insert_one(self, doc):
+            self.docs.append(doc)
+
+    class DB(dict):
+        def __missing__(self, key):
+            self[key] = Collection()
+            return self[key]
+
+    fake_db = DB()
+    monkeypatch.setattr(graph, "db", fake_db)
+    monkeypatch.setattr(audit, "_audit", AuditLog(fake_db, hmac_key="a" * 32))
+    _use(monkeypatch)
+    state = {**STATE, "recommendation": "flag_for_review", "recommendation_summary": "s", "reasoning": "r",
+             "signals": {**STATE["signals"], "model_version": "v7"}, "ai_run": AIRunMetadata()}
+    await graph.persist_result(state)
+    entry = fake_db["audit_log"].docs[-1]
+    assert entry["event_type"] == "ai.decision" and entry["subject"] == "C1"
+    assert entry["data"]["ml_model_version"] == "v7" and len(entry["signature"]) == 64
