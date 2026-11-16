@@ -19,11 +19,15 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 
 from fastapi import HTTPException
+from prometheus_client import Counter
 
 from core.analysis import request_analysis
 from core.config import settings
 
 log = logging.getLogger("claims_api.jobs")
+
+JOBS_FINISHED = Counter("analysis_jobs_total", "Finished analysis jobs", ["status"])
+JOB_CLAIMS = Counter("analysis_job_claims_total", "Claims processed by jobs", ["outcome"])
 
 JobStatus = Literal["queued", "running", "completed", "completed_with_errors", "failed"]
 COLLECTION = "analysis_jobs"
@@ -62,6 +66,7 @@ class JobStore:
         )
 
     async def record(self, job_id: str, result: dict[str, Any], *, ok: bool) -> None:
+        JOB_CLAIMS.labels("ok" if ok else "error").inc()
         await self.collection.update_one(
             {"job_id": job_id},
             {
@@ -109,6 +114,7 @@ async def run_job(store: JobStore, job_id: str, *, concurrency: int | None = Non
     final = await store.get(job_id) or {}
     status: JobStatus = "completed" if not final.get("failed") else "completed_with_errors"
     await store.mark(job_id, status, finished_at=_now())
+    JOBS_FINISHED.labels(status).inc()
     log.info("job finished", extra={"job_id": job_id, "status": status, "total": job["total"],
                                     "failed": final.get("failed", 0)})
 

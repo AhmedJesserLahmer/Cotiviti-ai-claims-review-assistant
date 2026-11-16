@@ -18,12 +18,13 @@ from langgraph.graph import END, StateGraph
 from agent.state import AgentState
 from ai_platform.audit import AIRunMetadata
 from ai_platform.guardrails.base import GuardrailFinding
+from ai_platform.metrics import record_run
+from ai_platform.service import get_claim_review_ai
+from claims_common.contracts import ScoreRequest, ScoreResponse
 from claims_common.http import ServiceUnavailableError
 from claims_common.tracing import set_span_attributes, span
-from ai_platform.service import get_claim_review_ai
-from db.mongo import db
-from claims_common.contracts import ScoreRequest, ScoreResponse
 from core.clients import get_ml_service
+from db.mongo import db
 
 MAX_LOOPS = 1
 
@@ -162,6 +163,7 @@ async def persist_result(state: AgentState) -> AgentState:
     await db["claim_analyses"].update_one(
         {"claim_id": state["claim_id"]}, {"$set": doc}, upsert=True
     )
+    record_run(run, state["recommendation"], get_claim_review_ai().client.health())
     log.info(
         "claim analyzed",
         extra={

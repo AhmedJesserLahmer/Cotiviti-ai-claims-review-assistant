@@ -1,12 +1,17 @@
 """Model inference and dataset seeding endpoints (internal)."""
 
 from fastapi import APIRouter
+from prometheus_client import Counter
 
 from claims_common.contracts import ClassifyResponse, PaymentResponse, ScoreRequest, ScoreResponse, SeedResponse
 from data_gen.seed_mongo import seed
 from ml.inference import active_version, classify_claim, ood_flags, predict_payment
 
 router = APIRouter(prefix="/v1", tags=["scoring"])
+
+PREDICTIONS = Counter("ml_predictions_total", "Model predictions served", ["endpoint", "model_version"])
+OOD_INPUTS = Counter("ml_out_of_distribution_total", "Scored inputs flagged out of distribution", ["feature"])
+RISK_LABELS = Counter("ml_predicted_risk_total", "Predicted risk labels", ["label"])
 
 
 def _claim(body: ScoreRequest) -> dict:
@@ -16,7 +21,10 @@ def _claim(body: ScoreRequest) -> dict:
 def _ood(body: ScoreRequest) -> list[str]:
     features = body.model_dump()
     features["age"] = features.pop("patient_age")
-    return ood_flags(features)
+    flags = ood_flags(features)
+    for flag in flags:
+        OOD_INPUTS.labels(flag.split("=")[0].replace("unknown ", "").split(" ")[0]).inc()
+    return flags
 
 
 @router.post("/classify", response_model=ClassifyResponse)
@@ -40,6 +48,8 @@ async def score(body: ScoreRequest):
     """Both claim-level models in one round trip (what the agent uses)."""
     claim = _claim(body)
     label, probabilities = classify_claim(claim, {"age": body.patient_age})
+    PREDICTIONS.labels("score", active_version()).inc()
+    RISK_LABELS.labels(label).inc()
     return ScoreResponse(
         predicted_risk_label=label,
         risk_probabilities=probabilities,
