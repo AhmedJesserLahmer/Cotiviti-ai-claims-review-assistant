@@ -43,7 +43,8 @@ async def test_happy_path_uses_llm_and_records_everything():
     provider = ScriptedProvider(["1. Low risk.\n2. Amount fine.", APPROVE], model="big")
     reasoning, output, run = await run_both(make_ai(provider))
     assert reasoning.startswith("1. Low risk")
-    assert output.recommendation == "approve" and run.confidence == 0.9
+    assert output.recommendation == "approve" and run.raw_confidence == 0.9
+    assert abs(run.confidence - 0.8875) < 1e-3  # 0.5 * 0.9 + 0.5 * (P(Low) 0.8 + P(Medium)/2 0.075)
     assert run.decision_source == "llm" and not run.degraded and run.model_used == "big"
     assert set(run.prompt_versions) == {"claim_reasoning", "claim_recommendation"}
     sent = provider.calls[0][1].content

@@ -20,6 +20,7 @@ from typing import Any
 
 from ai_platform.audit import AIRunMetadata
 from ai_platform.cache import NullCache, ResponseCache, build_cache, cache_key
+from ai_platform.calibration import calibrate
 from ai_platform.client import ResilientLLMClient, build_client
 from ai_platform.config import AISettings, get_ai_settings
 from ai_platform.errors import AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError
@@ -136,6 +137,10 @@ class ClaimReviewAI:
         run: AIRunMetadata,
     ) -> RecommendationOutput:
         output = await self._llm_or_rules(claim, signals, reasoning, allow_more_data, run)
+        run.raw_confidence = output.confidence
+        output = output.model_copy(update={"confidence": calibrate(
+            output.recommendation, output.confidence, signals, from_rules=run.decision_source == "rules"
+        )})
         extra = await self._extra_checks(output, reasoning, signals, run)
         decision = self._apply_policy(output, claim, signals, allow_more_data, run, extra)
 
@@ -195,6 +200,11 @@ class ClaimReviewAI:
     ) -> list[PolicyViolation]:
         """Escalate-only checks that need the LLM output (judge, ...)."""
         violations: list[PolicyViolation] = []
+        if output.recommendation == "approve" and (output.confidence or 0) < self.settings.min_approve_confidence:
+            violations.append(PolicyViolation(
+                "low_confidence", "block",
+                f"calibrated confidence {output.confidence:.2f} < {self.settings.min_approve_confidence:.2f}",
+            ))
         ungrounded = (run.grounding or {}).get("ungrounded") or []
         if run.decision_source == "llm" and len(ungrounded) >= self.settings.grounding_max_ungrounded:
             violations.append(PolicyViolation(

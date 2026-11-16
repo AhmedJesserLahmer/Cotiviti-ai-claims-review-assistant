@@ -55,6 +55,10 @@ class AISettings(BaseSettings):
     # "model=in/out;..." USD per 1M tokens, overriding ai_platform.pricing defaults.
     model_prices: str = ""
 
+    # --- calibration -----------------------------------------------------------------
+    # Approvals below this calibrated confidence abstain to manual review.
+    min_approve_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
+
     # --- grounding ------------------------------------------------------------------
     grounding_enabled: bool = True
     # Ungrounded numbers in LLM reasoning that block an approval.

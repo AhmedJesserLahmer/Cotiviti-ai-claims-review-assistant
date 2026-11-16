@@ -56,6 +56,7 @@ class AIRunMetadata(BaseModel):
     original_recommendation: str | None = None
     policy_violations: list[str] = Field(default_factory=list)
     confidence: float | None = None
+    raw_confidence: float | None = None
     key_factors: list[str] = Field(default_factory=list)
     total_latency_ms: float | None = None
     grounding: dict | None = None
