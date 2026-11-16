@@ -22,4 +22,8 @@ echo "Seeding MongoDB..."
 python -m data_gen.seed_mongo
 
 echo "Starting API..."
-exec uvicorn main:app --host 0.0.0.0 --port 8000
+exec uvicorn main:app --host 0.0.0.0 --port 8000 \
+  --workers "${UVICORN_WORKERS:-1}" \
+  --proxy-headers --forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-127.0.0.1}" \
+  --timeout-graceful-shutdown 20 \
+  --no-access-log
