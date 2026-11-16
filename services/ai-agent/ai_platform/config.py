@@ -28,6 +28,11 @@ class AISettings(BaseSettings):
     )
     # Comma-separated list, tried in order after the primary model fails.
     fallback_models: str = "llama-3.1-8b-instant"
+    # Optional cross-vendor fallback: any OpenAI-compatible endpoint, tried after the
+    # Groq chain. Disabled unless base URL and model are set.
+    openai_base_url: str = ""
+    openai_api_key: str = ""
+    openai_model: str = ""
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     # Forces the deterministic rule engine (demos, CI, or an LLM outage drill).
     offline_mode: bool = False
@@ -90,8 +95,12 @@ class AISettings(BaseSettings):
         return self.groq_api_key.strip() not in _PLACEHOLDER_KEYS
 
     @property
+    def openai_compatible_enabled(self) -> bool:
+        return bool(self.openai_base_url.strip() and self.openai_model.strip())
+
+    @property
     def llm_enabled(self) -> bool:
-        return self.has_llm_credentials and not self.offline_mode
+        return (self.has_llm_credentials or self.openai_compatible_enabled) and not self.offline_mode
 
 
 @lru_cache

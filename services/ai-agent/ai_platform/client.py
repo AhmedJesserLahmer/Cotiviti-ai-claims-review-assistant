@@ -149,10 +149,11 @@ def build_client(settings) -> ResilientLLMClient:
     the deterministic fallback instead of failing the request.
     """
     from ai_platform.providers.groq import GroqProvider
+    from ai_platform.providers.openai_compat import OpenAICompatibleProvider
 
     providers: list[LLMProvider] = []
-    if settings.llm_enabled:
-        providers = [
+    if settings.llm_enabled and settings.has_llm_credentials:
+        providers += [
             GroqProvider(
                 model=model,
                 api_key=settings.groq_api_key,
@@ -161,6 +162,16 @@ def build_client(settings) -> ResilientLLMClient:
             )
             for model in settings.model_chain
         ]
+    if settings.llm_enabled and settings.openai_compatible_enabled:
+        providers.append(
+            OpenAICompatibleProvider(
+                base_url=settings.openai_base_url,
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                timeout_s=settings.request_timeout_s,
+                temperature=settings.temperature,
+            )
+        )
     return ResilientLLMClient(
         providers,
         retry_policy=RetryPolicy(
