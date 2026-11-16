@@ -1,0 +1,11 @@
+{{- if .Values.worker.enabled }}
+{{- $env := list
+  (dict "name" "MONGO_URI" "value" (include "claims-review.mongoUri" .))
+  (dict "name" "MONGO_DB_NAME" "value" .Values.mongodb.dbName)
+  (dict "name" "AI_AGENT_URL" "value" (include "claims-review.url" (dict "root" . "component" "ai-agent" "port" .Values.aiAgent.port)))
+  (dict "name" "REDIS_URL" "value" (required "worker needs Redis (redis.enabled or redis.externalUrl)" (include "claims-review.redisUrl" .)))
+-}}
+{{- $secretEnv := list -}}
+{{- range (list "INTERNAL_TOKEN" "AUDIT_HMAC_KEY") }}{{- $secretEnv = append $secretEnv (dict "name" . "valueFrom" (dict "secretKeyRef" (dict "name" (include "claims-review.secretName" $) "key" . "optional" true))) -}}{{- end }}
+{{ include "claims-review.workload" (dict "root" . "component" "worker" "values" .Values.worker "env" (concat $env $secretEnv) "command" (list "arq" "core.worker.WorkerSettings") "probes" "none") }}
+{{- end }}

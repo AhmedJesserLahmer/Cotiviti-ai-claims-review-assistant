@@ -1,0 +1,11 @@
+{{- if .Values.aiAgent.enabled }}
+{{- $env := list
+  (dict "name" "MONGO_URI" "value" (include "claims-review.mongoUri" .))
+  (dict "name" "MONGO_DB_NAME" "value" .Values.mongodb.dbName)
+  (dict "name" "ML_SERVICE_URL" "value" (include "claims-review.url" (dict "root" . "component" "ml-service" "port" .Values.mlService.port)))
+  (dict "name" "AI_CACHE_REDIS_URL" "value" (include "claims-review.redisUrl" .))
+-}}
+{{- $secretEnv := list -}}
+{{- range (list "GROQ_API_KEY" "INTERNAL_TOKEN" "AUDIT_HMAC_KEY") }}{{- $secretEnv = append $secretEnv (dict "name" . "valueFrom" (dict "secretKeyRef" (dict "name" (include "claims-review.secretName" $) "key" . "optional" true))) -}}{{- end }}
+{{ include "claims-review.workload" (dict "root" . "component" "ai-agent" "values" .Values.aiAgent "port" .Values.aiAgent.port "env" (concat $env $secretEnv)) }}
+{{- end }}
