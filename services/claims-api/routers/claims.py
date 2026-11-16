@@ -51,11 +51,12 @@ async def get_claim(claim_id: str):
 
 
 @router.post("/{claim_id}/analyze", response_model=AnalysisResult)
-async def analyze(claim_id: str):
+async def analyze(claim_id: str, refresh: bool = False):
+    """Run the AI analysis. ``refresh=true`` bypasses the LLM result cache."""
     claim = await db["claims"].find_one({"claim_id": claim_id}, {"_id": 0})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return await request_analysis(claim_id)
+    return await request_analysis(claim_id, refresh=refresh)
 
 
 @router.get("/{claim_id}/analysis", response_model=AnalysisResult)

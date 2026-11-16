@@ -16,7 +16,7 @@ async def create_analysis(body: AnalysisRequest):
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     try:
-        return await analyze_claim(body.claim_id)
+        return await analyze_claim(body.claim_id, bypass_cache=body.bypass_cache)
     except MLUnavailableError as exc:
         raise HTTPException(status_code=503, detail="ML scoring is temporarily unavailable") from exc
 

@@ -19,6 +19,7 @@ import json
 from typing import Any
 
 from ai_platform.audit import AIRunMetadata
+from ai_platform.cache import NullCache, ResponseCache, build_cache, cache_key
 from ai_platform.client import ResilientLLMClient, build_client
 from ai_platform.config import AISettings, get_ai_settings
 from ai_platform.errors import AllProvidersFailedError, OutputValidationError
@@ -40,10 +41,22 @@ _LOOP_NOTE = "Note: additional data has already been fetched once; you must not 
 
 
 class ClaimReviewAI:
-    def __init__(self, client: ResilientLLMClient, settings: AISettings):
+    def __init__(self, client: ResilientLLMClient, settings: AISettings, cache: ResponseCache | None = None):
         self.client = client
         self.settings = settings
         self.thresholds = PolicyThresholds.from_settings(settings)
+        self.cache = cache or NullCache()
+
+    def _key(self, prompt_id: str, messages) -> str:
+        return cache_key(prompt_id, messages, model_chain=[slot.label for slot in self.client.slots])
+
+    async def _cached(self, key: str, run: AIRunMetadata, prompt_name: str) -> str | None:
+        if run.cache_bypassed:
+            return None
+        value = await self.cache.get(key)
+        if value is not None:
+            run.cache_hits.append(prompt_name)
+        return value
 
     # ------------------------------------------------------------------ inputs
     def _protect(self, data: dict[str, Any], run: AIRunMetadata, *, keep_keys: frozenset[str] = frozenset()):
@@ -76,6 +89,10 @@ class ClaimReviewAI:
             provider_json=json.dumps(provider_view, default=str),
             signals_json=json.dumps(signals, default=str),
         )
+        key = self._key(CLAIM_REASONING.id, messages)
+        cached = await self._cached(key, run, CLAIM_REASONING.name)
+        if cached is not None:
+            return cached
         try:
             response = await self.client.generate(messages, recorder=run, temperature=self.settings.temperature)
             text, findings = sanitize_reasoning(response.text, max_chars=self.settings.max_reasoning_chars)
@@ -83,6 +100,7 @@ class ClaimReviewAI:
             run.mark_degraded(f"reasoning: {exc}")
             return rules.build_reasoning(claim, signals)
         run.add_events(findings)
+        await self.cache.set(key, text, self.settings.cache_ttl_s)
         return text
 
     # ---------------------------------------------------------- recommendation
@@ -126,8 +144,12 @@ class ClaimReviewAI:
             signals_json=json.dumps(signals, default=str),
             loop_note="" if allow_more_data else _LOOP_NOTE,
         )
+        key = self._key(CLAIM_RECOMMENDATION.id, messages)
+        cached = await self._cached(key, run, CLAIM_RECOMMENDATION.name)
+        if cached is not None:
+            return RecommendationOutput.model_validate_json(cached)
         try:
-            return await generate_structured(
+            output = await generate_structured(
                 self.client,
                 messages,
                 RecommendationOutput,
@@ -139,6 +161,9 @@ class ClaimReviewAI:
             )
         except (AllProvidersFailedError, OutputValidationError) as exc:
             return fallback(f"recommendation: {exc}")
+        # Cache the model's own answer; policy is re-applied on every run.
+        await self.cache.set(key, output.model_dump_json(), self.settings.cache_ttl_s)
+        return output
 
     def _apply_policy(
         self, output: RecommendationOutput, claim: dict, signals: dict, allow_more_data: bool, run: AIRunMetadata
@@ -165,6 +190,7 @@ class ClaimReviewAI:
             "circuits": self.client.health(),
             "policy_enforcement": self.settings.policy_enforcement_enabled,
             "guardrails": self.settings.guardrails_enabled,
+            "cache": type(self.cache).__name__,
         }
 
 
@@ -176,5 +202,5 @@ def get_claim_review_ai() -> ClaimReviewAI:
     global _instance
     if _instance is None:
         settings = get_ai_settings()
-        _instance = ClaimReviewAI(build_client(settings), settings)
+        _instance = ClaimReviewAI(build_client(settings), settings, build_cache(settings))
     return _instance

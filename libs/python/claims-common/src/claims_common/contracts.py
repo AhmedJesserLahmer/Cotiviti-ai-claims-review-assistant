@@ -32,6 +32,8 @@ class MLSignals(BaseModel):
 
 class AnalysisRequest(BaseModel):
     claim_id: str = Field(min_length=1, max_length=64)
+    # Skip the LLM result cache (explicit "re-run" from a reviewer).
+    bypass_cache: bool = False
 
 
 class AnalysisResult(BaseModel):

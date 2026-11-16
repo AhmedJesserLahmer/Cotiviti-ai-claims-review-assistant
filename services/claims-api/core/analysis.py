@@ -7,9 +7,9 @@ from claims_common.http import ServiceResponseError, ServiceUnavailableError
 from core.clients import get_ai_agent
 
 
-async def request_analysis(claim_id: str) -> AnalysisResult:
+async def request_analysis(claim_id: str, *, refresh: bool = False) -> AnalysisResult:
     try:
-        body = await get_ai_agent().post("/v1/analyses", json={"claim_id": claim_id})
+        body = await get_ai_agent().post("/v1/analyses", json={"claim_id": claim_id, "bypass_cache": refresh})
     except ServiceUnavailableError as exc:
         raise HTTPException(status_code=503, detail="AI agent is unavailable, please retry shortly") from exc
     except ServiceResponseError as exc:

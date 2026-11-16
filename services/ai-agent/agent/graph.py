@@ -218,9 +218,10 @@ def get_graph():
     return _compiled_graph
 
 
-async def analyze_claim(claim_id: str) -> dict:
+async def analyze_claim(claim_id: str, *, bypass_cache: bool = False) -> dict:
     graph = get_graph()
-    result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": AIRunMetadata()})
+    run = AIRunMetadata(cache_bypassed=bypass_cache)
+    result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": run})
     return {
         "claim_id": result["claim_id"],
         "signals": result["signals"],

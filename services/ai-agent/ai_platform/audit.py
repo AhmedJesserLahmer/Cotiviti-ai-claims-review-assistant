@@ -58,6 +58,8 @@ class AIRunMetadata(BaseModel):
     confidence: float | None = None
     key_factors: list[str] = Field(default_factory=list)
     total_latency_ms: float | None = None
+    cache_hits: list[str] = Field(default_factory=list)
+    cache_bypassed: bool = False
 
     _t0: float = PrivateAttr(default_factory=time.perf_counter)
     _primary_model: str | None = PrivateAttr(default=None)

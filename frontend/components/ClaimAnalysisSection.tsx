@@ -23,7 +23,8 @@ export default function ClaimAnalysisSection({
     setLoading(true);
     setError(null);
     try {
-      const result = await api.analyzeClaim(claimId);
+      // A re-run must produce a fresh decision, not the cached one.
+      const result = await api.analyzeClaim(claimId, analysis !== null);
       setAnalysis(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");

@@ -40,7 +40,7 @@ def test_create_analysis_validates_body(monkeypatch):
 
 
 def test_create_analysis_runs_agent(monkeypatch):
-    async def fake_analyze(claim_id):
+    async def fake_analyze(claim_id, bypass_cache=False):
         return {"claim_id": claim_id, "signals": SIGNALS, "reasoning": "r", "recommendation": "approve",
                 "recommendation_summary": "s", "loops": 0, "ai_metadata": {"decision_source": "rules"}}
 

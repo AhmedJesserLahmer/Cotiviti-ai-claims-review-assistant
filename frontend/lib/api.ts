@@ -28,8 +28,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   listClaims: () => request<Claim[]>("/claims?limit=100"),
   getClaim: (claimId: string) => request<Claim>(`/claims/${claimId}`),
-  analyzeClaim: (claimId: string) =>
-    request<AnalysisResult>(`/claims/${claimId}/analyze`, { method: "POST" }),
+  analyzeClaim: (claimId: string, refresh = false) =>
+    request<AnalysisResult>(`/claims/${claimId}/analyze${refresh ? "?refresh=true" : ""}`, {
+      method: "POST",
+    }),
   getAnalysis: (claimId: string) =>
     request<AnalysisResult>(`/claims/${claimId}/analysis`),
   listProviders: () => request<Provider[]>("/providers"),

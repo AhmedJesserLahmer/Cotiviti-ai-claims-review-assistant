@@ -40,6 +40,13 @@ class AISettings(BaseSettings):
     circuit_failure_threshold: int = Field(default=5, ge=1)
     circuit_recovery_s: float = Field(default=30.0, gt=0)
 
+    # --- caching ---------------------------------------------------------------
+    cache_enabled: bool = True
+    cache_ttl_s: int = Field(default=3600, ge=1)
+    cache_max_entries: int = Field(default=1000, ge=1)
+    # Shared cache for all replicas; in-process LRU when unset.
+    cache_redis_url: str | None = None
+
     # --- validation ------------------------------------------------------------
     max_repair_attempts: int = Field(default=1, ge=0, le=5)
 
