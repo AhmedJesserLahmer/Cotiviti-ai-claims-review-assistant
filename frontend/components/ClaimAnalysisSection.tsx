@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
-import { api } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { Sparkles, Loader2, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { analysisStreamUrl, api } from "@/lib/api";
 import { AnalysisResult } from "@/lib/types";
 import SignalsPanel from "./SignalsPanel";
 import ReasoningNarrative from "./ReasoningNarrative";
 import AIReliabilityPanel from "./AIReliabilityPanel";
+
+const STAGE_LABELS: Record<string, string> = {
+  fetch_claim_context: "Loading claim, patient and provider history",
+  run_ml_signals: "Scoring with ML models",
+  reasoning_node: "Reasoning over the signals",
+  recommendation_node: "Deciding and applying guardrails",
+  persist_result: "Saving the audit trail",
+};
 
 export default function ClaimAnalysisSection({
   claimId,
@@ -18,19 +26,66 @@ export default function ClaimAnalysisSection({
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(initialAnalysis);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stages, setStages] = useState<string[]>([]);
+  const sourceRef = useRef<EventSource | null>(null);
 
-  async function runAnalysis() {
-    setLoading(true);
-    setError(null);
+  // Close any open stream when the component unmounts.
+  useEffect(() => () => sourceRef.current?.close(), []);
+
+  async function runWithoutStreaming(refresh: boolean) {
     try {
-      // A re-run must produce a fresh decision, not the cached one.
-      const result = await api.analyzeClaim(claimId, analysis !== null);
-      setAnalysis(result);
+      setAnalysis(await api.analyzeClaim(claimId, refresh));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  function runAnalysis() {
+    // A re-run must produce a fresh decision, not the cached one.
+    const refresh = analysis !== null;
+    setLoading(true);
+    setError(null);
+    setStages([]);
+
+    if (typeof window === "undefined" || typeof EventSource === "undefined") {
+      void runWithoutStreaming(refresh);
+      return;
+    }
+
+    sourceRef.current?.close();
+    const source = new EventSource(analysisStreamUrl(claimId, refresh));
+    sourceRef.current = source;
+    let finished = false;
+
+    const finish = () => {
+      finished = true;
+      source.close();
+      setLoading(false);
+    };
+
+    source.addEventListener("stage", (event) => {
+      const { stage } = JSON.parse((event as MessageEvent).data) as { stage: string };
+      setStages((previous) => (previous.includes(stage) ? previous : [...previous, stage]));
+    });
+    source.addEventListener("result", (event) => {
+      setAnalysis(JSON.parse((event as MessageEvent).data) as AnalysisResult);
+      finish();
+    });
+    source.addEventListener("error", (event) => {
+      const data = (event as MessageEvent).data;
+      if (typeof data === "string" && data.length > 0) {
+        // Error event sent by the server: show it.
+        const { detail } = JSON.parse(data) as { detail: string };
+        setError(detail);
+        finish();
+      } else if (!finished) {
+        // Transport failure (proxy, CORS, no SSE support): fall back to a plain request.
+        source.close();
+        void runWithoutStreaming(refresh);
+      }
+    });
   }
 
   return (
@@ -57,6 +112,17 @@ export default function ClaimAnalysisSection({
           </>
         )}
       </button>
+
+      {loading && stages.length > 0 && (
+        <ol className="card-toon space-y-1 p-4 text-xs font-bold text-cotiviti-ink/80" aria-live="polite">
+          {stages.map((stage) => (
+            <li key={stage} className="flex items-center gap-2">
+              <CheckCircle2 size={14} strokeWidth={3} className="text-cotiviti-teal" />
+              {STAGE_LABELS[stage] ?? stage}
+            </li>
+          ))}
+        </ol>
+      )}
 
       {error && (
         <p className="flex items-center gap-2 rounded-xl border-[2.5px] border-cotiviti-ink bg-cotiviti-coral px-3 py-2 text-sm font-bold text-white">

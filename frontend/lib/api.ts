@@ -25,6 +25,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** URL of the server-sent events stream with live analysis progress (browser only). */
+export function analysisStreamUrl(claimId: string, refresh: boolean): string {
+  return `${BROWSER_BASE}/claims/${encodeURIComponent(claimId)}/analyze/stream?refresh=${refresh}`;
+}
+
 export const api = {
   listClaims: () => request<Claim[]>("/claims?limit=100"),
   getClaim: (claimId: string) => request<Claim>(`/claims/${claimId}`),
