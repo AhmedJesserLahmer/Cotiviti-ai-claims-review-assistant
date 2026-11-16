@@ -1,0 +1,4 @@
+# Accepted Trivy findings. Every entry needs a reason and a review date.
+#
+# Example:
+# AVD-DS-0026  # HEALTHCHECK defined in compose for the arq worker instead (review 2027-03)

@@ -1,0 +1,15 @@
+# Secret-scanning configuration (gitleaks). Defaults plus allowlisted placeholders.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholders and test fixtures"
+paths = [
+  '''\.env\.example$''',
+  '''libs/python/claims-common/tests/''',
+  '''services/.*/tests/''',
+]
+regexes = [
+  '''your_groq_api_key_here''',
+  '''dev-only-insecure-audit-key''',
+]

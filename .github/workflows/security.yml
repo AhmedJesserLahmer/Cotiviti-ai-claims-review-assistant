@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write   # SARIF upload to GitHub code scanning
 
 concurrency:
   group: security-${{ github.ref }}
@@ -47,3 +48,46 @@ jobs:
           node-version: "22"
       # Production dependencies only; high and critical advisories fail the job.
       - run: npm audit --omit=dev --audit-level=high
+
+  trivy-fs:
+    name: Trivy (dependencies + IaC misconfiguration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan repository (vulns, Dockerfiles, compose, Helm, Terraform)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy-fs.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+      - name: Fail on findings
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"
+
+  gitleaks:
+    name: secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # scan the full history, not just the last commit
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
