@@ -1,0 +1,15 @@
+# Python service images are built with the repository root as context so they can
+# install libs/python/claims-common. Only send what the images need.
+*
+!libs/python/
+!services/
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/venv
+**/.venv
+**/.env
+services/*/data
+services/*/ml/models/*.joblib
+services/*/tests
