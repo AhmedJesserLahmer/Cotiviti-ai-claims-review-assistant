@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from agent.graph import analyze_claim
+from agent.graph import MLUnavailableError, analyze_claim
 from ai_platform.service import get_claim_review_ai
 from claims_common.contracts import AnalysisRequest, AnalysisResult
 from db.mongo import db
@@ -15,7 +15,10 @@ async def create_analysis(body: AnalysisRequest):
     claim = await db["claims"].find_one({"claim_id": body.claim_id}, {"_id": 0, "claim_id": 1})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    return await analyze_claim(body.claim_id)
+    try:
+        return await analyze_claim(body.claim_id)
+    except MLUnavailableError as exc:
+        raise HTTPException(status_code=503, detail="ML scoring is temporarily unavailable") from exc
 
 
 @router.get("/analyses/{claim_id}", response_model=AnalysisResult)

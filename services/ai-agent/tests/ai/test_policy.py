@@ -33,6 +33,7 @@ def test_clean_claim_approval_is_kept():
         ({"is_recent_anomaly": True}, "recent_anomaly"),
         ({"predicted_paid_amount": 100.0}, "billing_gap"),
         ({"ood_flags": ["unknown treatment_type 'X'"]}, "ml_out_of_distribution"),
+        ({"signals_source": "cache"}, "stale_ml_signals"),
     ],
 )
 def test_blocking_rules_escalate_approvals(change, rule):

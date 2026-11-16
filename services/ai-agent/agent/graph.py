@@ -17,6 +17,8 @@ from langgraph.graph import END, StateGraph
 
 from agent.state import AgentState
 from ai_platform.audit import AIRunMetadata
+from ai_platform.guardrails.base import GuardrailFinding
+from claims_common.http import ServiceUnavailableError
 from ai_platform.service import get_claim_review_ai
 from db.mongo import db
 from claims_common.contracts import ScoreRequest, ScoreResponse
@@ -24,7 +26,14 @@ from core.clients import get_ml_service
 
 MAX_LOOPS = 1
 
-log = logging.getLogger("claims_api.agent")
+log = logging.getLogger("ai_agent.graph")
+
+# Claim-level fields that can be reused from a previous analysis when ml-service is down.
+_CACHEABLE_SIGNALS = ("predicted_risk_label", "risk_probabilities", "predicted_paid_amount", "model_version", "ood_flags")
+
+
+class MLUnavailableError(RuntimeError):
+    """ml-service is down and there is no previous analysis to fall back on."""
 
 
 async def fetch_claim_context(state: AgentState) -> AgentState:
@@ -73,22 +82,36 @@ async def run_ml_signals(state: AgentState) -> AgentState:
     provider = state["provider"]
     timeseries_window = state["timeseries_window"]
 
-    score = await score_claim(claim, state["patient"], provider)
+    run = state.get("ai_run")
+    try:
+        score = (await score_claim(claim, state["patient"], provider)).model_dump()
+        source = "live"
+    except ServiceUnavailableError as exc:
+        previous = await db["claim_analyses"].find_one({"claim_id": state["claim_id"]}, {"_id": 0, "signals": 1})
+        if not previous or not previous.get("signals"):
+            raise MLUnavailableError(f"ml-service unavailable and no cached signals: {exc}") from exc
+        score = {k: previous["signals"].get(k) for k in _CACHEABLE_SIGNALS}
+        score["ood_flags"] = score.get("ood_flags") or []
+        source = "cache"
+        log.warning("using cached ML signals", extra={"claim_id": state["claim_id"], "error": str(exc)})
+        if run is not None:
+            run.add_event(GuardrailFinding("ml_fallback", "warned", "ml-service unavailable; reused cached signals"))
 
     anomaly_days = [row for row in timeseries_window if row.get("is_anomaly")]
     most_recent = timeseries_window[-1] if timeseries_window else {}
 
     signals = {
-        "predicted_risk_label": score.predicted_risk_label,
-        "risk_probabilities": score.risk_probabilities,
-        "predicted_paid_amount": score.predicted_paid_amount,
+        "predicted_risk_label": score["predicted_risk_label"],
+        "risk_probabilities": score["risk_probabilities"],
+        "predicted_paid_amount": score["predicted_paid_amount"],
         "provider_cluster_id": int(provider.get("cluster_id", -1)),
         "provider_cluster_label": provider.get("cluster_label", "Unknown"),
         "anomaly_flagged_days": len(anomaly_days),
         "anomaly_recent_score": round(float(most_recent.get("anomaly_score", 0.0)), 3),
         "is_recent_anomaly": bool(most_recent.get("is_anomaly", False)),
-        "model_version": score.model_version,
-        "ood_flags": score.ood_flags,
+        "model_version": score.get("model_version"),
+        "ood_flags": score.get("ood_flags") or [],
+        "signals_source": source,
     }
 
     return {**state, "signals": signals}

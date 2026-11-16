@@ -25,6 +25,9 @@ class MLSignals(BaseModel):
     is_recent_anomaly: bool
     model_version: str | None = None
     ood_flags: list[str] = Field(default_factory=list)
+    # "live" = scored now by ml-service; "cache" = reused from the last analysis
+    # because ml-service was unavailable (stale, never auto-approved).
+    signals_source: Literal["live", "cache"] = "live"
 
 
 class AnalysisRequest(BaseModel):

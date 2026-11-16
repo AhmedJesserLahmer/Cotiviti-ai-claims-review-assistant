@@ -84,6 +84,11 @@ def evaluate_signals(
             )
         )
 
+    if signals.get("signals_source") == "cache":
+        violations.append(
+            PolicyViolation("stale_ml_signals", "block", "ML scoring was unavailable; signals reused from a past run")
+        )
+
     ood = signals.get("ood_flags") or []
     if ood:
         violations.append(
