@@ -72,3 +72,30 @@ def test_jobs_api_validates_and_reports(monkeypatch):
 
 def test_default_runner_is_in_process():
     assert runners.get_job_runner().name == "in-process"
+
+
+async def test_arq_runner_enqueues_idempotently():
+    calls = []
+
+    class FakePool:
+        async def enqueue_job(self, name, *args, **kwargs):
+            calls.append((name, args, kwargs))
+
+        async def aclose(self):
+            calls.append("closed")
+
+    async def factory():
+        return FakePool()
+
+    runner = jobs.ArqRunner("redis://x", pool_factory=factory)
+    await runner.enqueue("job_1")
+    await runner.aclose()
+    assert calls[0] == ("analyze_job", ("job_1",), {"_job_id": "job_1"}) and calls[-1] == "closed"
+
+
+def test_worker_settings_are_importable():
+    pytest.importorskip("arq")
+    from core import worker
+
+    assert worker.WorkerSettings.functions == [worker.analyze_job]
+    assert worker.TASK_NAME == "analyze_job"

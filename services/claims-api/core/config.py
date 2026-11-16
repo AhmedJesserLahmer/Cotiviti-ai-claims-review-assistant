@@ -14,6 +14,8 @@ class Settings(ServiceSettings):
     # Parallel analyses per job (bounded so a big upload cannot flood ai-agent / the LLM).
     analysis_concurrency: int = 4
     max_job_claims: int = 500
+    # When set, jobs are queued in Redis and executed by the arq worker deployment.
+    redis_url: str | None = None
 
 
 settings = Settings()

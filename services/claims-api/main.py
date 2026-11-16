@@ -3,12 +3,14 @@ from contextlib import asynccontextmanager
 from claims_common.app import create_app
 from core.clients import close_clients
 from core.config import settings
+from core.runners import close_runner
 from routers import claims, health, jobs, providers, seed
 
 
 @asynccontextmanager
 async def lifespan(_app):
     yield
+    await close_runner()
     await close_clients()
 
 

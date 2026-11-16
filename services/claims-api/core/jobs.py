@@ -137,3 +137,35 @@ class InProcessRunner:
     async def drain(self) -> None:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
+
+
+class ArqRunner:
+    """Queues jobs in Redis for the arq worker (core/worker.py)."""
+
+    name = "redis"
+
+    def __init__(self, redis_url: str, *, pool_factory=None):
+        self.redis_url = redis_url
+        self._pool = None
+        self._pool_factory = pool_factory
+
+    async def _get_pool(self):
+        if self._pool is None:
+            if self._pool_factory is not None:
+                self._pool = await self._pool_factory()
+            else:
+                from arq import create_pool
+                from arq.connections import RedisSettings
+
+                self._pool = await create_pool(RedisSettings.from_dsn(self.redis_url))
+        return self._pool
+
+    async def enqueue(self, job_id: str) -> None:
+        pool = await self._get_pool()
+        # _job_id makes enqueueing idempotent: retries never run the same job twice.
+        await pool.enqueue_job("analyze_job", job_id, _job_id=job_id)
+
+    async def aclose(self) -> None:
+        if self._pool is not None:
+            await self._pool.aclose()
+            self._pool = None
