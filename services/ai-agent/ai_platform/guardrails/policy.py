@@ -84,6 +84,12 @@ def evaluate_signals(
             )
         )
 
+    ood = signals.get("ood_flags") or []
+    if ood:
+        violations.append(
+            PolicyViolation("ml_out_of_distribution", "block", f"ML input unlike training data: {'; '.join(ood[:3])}")
+        )
+
     if injection_detected:
         violations.append(
             PolicyViolation("untrusted_input", "block", "claim fields contained a suspected prompt injection")

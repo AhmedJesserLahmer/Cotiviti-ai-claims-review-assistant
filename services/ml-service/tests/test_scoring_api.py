@@ -42,3 +42,18 @@ def test_individual_endpoints_agree_with_score():
 
 def test_missing_features_rejected():
     assert TestClient(main.app).post("/v1/score", json={"billed_amount": 1}).status_code == 422
+
+
+def test_in_distribution_claim_has_no_ood_flags():
+    assert TestClient(main.app).post("/v1/score", json=FEATURES).json()["ood_flags"] == []
+
+
+def test_out_of_distribution_claim_is_flagged():
+    odd = {**FEATURES, "billed_amount": 9_000_000, "treatment_type": "Teleportation"}
+    flags = TestClient(main.app).post("/v1/score", json=odd).json()["ood_flags"]
+    assert any("billed_amount" in f for f in flags) and any("treatment_type" in f for f in flags)
+
+
+@pytest.mark.parametrize("field, value", [("billed_amount", -5), ("patient_age", 300), ("length_of_stay", -1)])
+def test_impossible_values_rejected(field, value):
+    assert TestClient(main.app).post("/v1/score", json={**FEATURES, field: value}).status_code == 422

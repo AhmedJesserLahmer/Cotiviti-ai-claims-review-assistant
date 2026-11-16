@@ -23,6 +23,8 @@ class MLSignals(BaseModel):
     anomaly_flagged_days: int
     anomaly_recent_score: float
     is_recent_anomaly: bool
+    model_version: str | None = None
+    ood_flags: list[str] = Field(default_factory=list)
 
 
 class AnalysisRequest(BaseModel):
@@ -47,15 +49,20 @@ class SeedResponse(BaseModel):
 
 
 class ScoreRequest(BaseModel):
-    """Features needed by the claim-level models (classification + payment prediction)."""
+    """Features needed by the claim-level models (classification + payment prediction).
 
-    billed_amount: float
-    length_of_stay: int = 0
-    prior_claims_count: int = 0
-    treatment_type: str
-    procedure_code: str
-    patient_age: int
-    provider_avg_claim_amount: float
+    Bounds reject physically impossible values outright (422); values that are
+    possible but outside what the models were trained on are reported as
+    ``ood_flags`` in the response instead.
+    """
+
+    billed_amount: float = Field(gt=0, le=10_000_000)
+    length_of_stay: int = Field(default=0, ge=0, le=365)
+    prior_claims_count: int = Field(default=0, ge=0, le=10_000)
+    treatment_type: str = Field(min_length=1, max_length=40)
+    procedure_code: str = Field(min_length=1, max_length=20)
+    patient_age: int = Field(ge=0, le=120)
+    provider_avg_claim_amount: float = Field(ge=0, le=10_000_000)
 
 
 class ClassifyResponse(BaseModel):
@@ -74,3 +81,5 @@ class ScoreResponse(BaseModel):
     risk_probabilities: dict[str, float]
     predicted_paid_amount: float
     model_version: str | None = None
+    # Reasons the input looks unlike the training data; predictions are less reliable.
+    ood_flags: list[str] = Field(default_factory=list)

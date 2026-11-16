@@ -87,6 +87,8 @@ async def run_ml_signals(state: AgentState) -> AgentState:
         "anomaly_flagged_days": len(anomaly_days),
         "anomaly_recent_score": round(float(most_recent.get("anomaly_score", 0.0)), 3),
         "is_recent_anomaly": bool(most_recent.get("is_anomaly", False)),
+        "model_version": score.model_version,
+        "ood_flags": score.ood_flags,
     }
 
     return {**state, "signals": signals}

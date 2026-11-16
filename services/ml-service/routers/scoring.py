@@ -4,13 +4,19 @@ from fastapi import APIRouter
 
 from claims_common.contracts import ClassifyResponse, PaymentResponse, ScoreRequest, ScoreResponse, SeedResponse
 from data_gen.seed_mongo import seed
-from ml.inference import active_version, classify_claim, predict_payment
+from ml.inference import active_version, classify_claim, ood_flags, predict_payment
 
 router = APIRouter(prefix="/v1", tags=["scoring"])
 
 
 def _claim(body: ScoreRequest) -> dict:
     return body.model_dump(exclude={"patient_age", "provider_avg_claim_amount"})
+
+
+def _ood(body: ScoreRequest) -> list[str]:
+    features = body.model_dump()
+    features["age"] = features.pop("patient_age")
+    return ood_flags(features)
 
 
 @router.post("/classify", response_model=ClassifyResponse)
@@ -39,6 +45,7 @@ async def score(body: ScoreRequest):
         risk_probabilities=probabilities,
         predicted_paid_amount=predict_payment(claim, body.provider_avg_claim_amount),
         model_version=active_version(),
+        ood_flags=_ood(body),
     )
 
 

@@ -24,7 +24,7 @@ from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, r2_sc
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from ml import registry
+from ml import ood, registry
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 HOLDOUT_FRACTION = 0.2
@@ -223,6 +223,7 @@ def main():
         "data_sha256": {"claims.csv": _sha256(os.path.join(DATA_DIR, "claims.csv"))},
         "features": {"classifier": classifier.feature_columns_, "predictor": predictor.feature_columns_},
         "metrics": metrics,
+        "feature_profile": ood.build_profile(training_frame),
         "clusters": {str(k): v for k, v in label_by_cluster.items()},
     }
     path = registry.save_version(

@@ -56,3 +56,9 @@ def predict_payment(claim: dict, provider_avg_claim_amount: float) -> float:
 
 def active_version() -> str:
     return get_bundle().version
+
+
+def ood_flags(features: dict) -> list[str]:
+    from ml.ood import check
+
+    return check(features, get_bundle().manifest.get("feature_profile"))
