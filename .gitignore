@@ -1,20 +1,38 @@
-# Env files (root .env is used by docker-compose, services/claims-api/.env by local uvicorn runs)
+# Env files (root .env is used by docker compose, services/<name>/.env by local runs)
 .env
-services/claims-api/.env
+.env.*
+!.env.example
+services/*/.env
 
-# Python
-services/claims-api/venv/
-services/claims-api/__pycache__/
-services/claims-api/**/__pycache__/
-services/claims-api/data/
-services/claims-api/ml/models/*.joblib
+# Python (all services and libs)
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+services/*/data/
+services/*/ml/models/*.joblib
 
 # Node / Next.js
-frontend/node_modules/
+node_modules/
 frontend/.next/
 frontend/.env.local
+*.tsbuildinfo
 
-# OS
+# Infra
+infra/helm/**/charts/*.tgz
+*.tfstate
+*.tfstate.*
+.terraform/
+kubeconfig*
+
+# Editors / OS
+.idea/
 .DS_Store
 Thumbs.db
 
