@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from core.analysis import request_analysis
+from core.limits import analyze_limit, bulk_limit
 from db.mongo import db
 from models.schemas import AnalysisResult, ClaimOut, ClaimUploadError, ClaimUploadResponse
 from routers.jobs import start_analysis_job
@@ -50,7 +51,7 @@ async def get_claim(claim_id: str):
     return claim
 
 
-@router.post("/{claim_id}/analyze", response_model=AnalysisResult)
+@router.post("/{claim_id}/analyze", response_model=AnalysisResult, dependencies=[analyze_limit])
 async def analyze(claim_id: str, refresh: bool = False):
     """Run the AI analysis. ``refresh=true`` bypasses the LLM result cache."""
     claim = await db["claims"].find_one({"claim_id": claim_id}, {"_id": 0})
@@ -67,7 +68,7 @@ async def get_analysis(claim_id: str):
     return analysis
 
 
-@router.post("/upload", response_model=ClaimUploadResponse)
+@router.post("/upload", response_model=ClaimUploadResponse, dependencies=[bulk_limit])
 async def upload_claims(
     file: UploadFile = File(...),
     auto_analyze: bool = Form(False),

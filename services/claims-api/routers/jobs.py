@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core.config import settings
+from core.limits import bulk_limit
 from core.runners import get_job_runner, get_job_store
 from db.mongo import db
 
@@ -23,7 +24,7 @@ async def start_analysis_job(claim_ids: list[str], *, source: str) -> dict:
     return job
 
 
-@router.post("/analyses", status_code=202)
+@router.post("/analyses", status_code=202, dependencies=[bulk_limit])
 async def create_analysis_job(body: AnalysisJobRequest):
     unique_ids = list(dict.fromkeys(body.claim_ids))
     known = {doc["claim_id"] async for doc in db["claims"].find({"claim_id": {"$in": unique_ids}}, {"claim_id": 1})}
