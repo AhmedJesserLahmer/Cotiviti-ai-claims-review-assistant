@@ -58,6 +58,11 @@ test: ## Run unit tests of every python package
 test-ai: ## Run only the AI reliability layer tests (no ML or DB needed)
 	cd services/ai-agent && $(PYTHON) -m pytest -q tests/ai
 
+.PHONY: eval
+eval: ## Run the AI evaluation gate (scripted + rule-engine modes)
+	cd services/ai-agent && PYTHONPATH=../../libs/python/claims-common/src $(PYTHON) -m evals.run_eval --mode scripted --min-accuracy 0.95 --max-unsafe 0
+	cd services/ai-agent && PYTHONPATH=../../libs/python/claims-common/src $(PYTHON) -m evals.run_eval --mode rules --min-accuracy 0.9 --max-unsafe 0
+
 .PHONY: train
 train: ## Generate synthetic data and train a new model version locally
 	cd services/ml-service && $(PYTHON) -m data_gen.generate_data && $(PYTHON) -m ml.train_models
