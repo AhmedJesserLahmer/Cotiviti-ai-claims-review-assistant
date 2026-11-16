@@ -55,6 +55,11 @@ class AISettings(BaseSettings):
     # "model=in/out;..." USD per 1M tokens, overriding ai_platform.pricing defaults.
     model_prices: str = ""
 
+    # --- grounding ------------------------------------------------------------------
+    grounding_enabled: bool = True
+    # Ungrounded numbers in LLM reasoning that block an approval.
+    grounding_max_ungrounded: int = Field(default=2, ge=1)
+
     # --- LLM-as-judge ---------------------------------------------------------------
     # Second LLM call auditing every LLM approval (costs one extra call per approval).
     judge_enabled: bool = False

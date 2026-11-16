@@ -25,6 +25,7 @@ from ai_platform.config import AISettings, get_ai_settings
 from ai_platform.errors import AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError
 from ai_platform.fallback import rules
 from ai_platform.guardrails.base import GuardrailFinding
+from ai_platform.guardrails.grounding import check_grounding
 from ai_platform.guardrails.injection import sanitize_payload
 from ai_platform.guardrails.output import sanitize_reasoning
 from ai_platform.guardrails.pii import redact_payload
@@ -100,6 +101,7 @@ class ClaimReviewAI:
         key = self._key(CLAIM_REASONING.id, messages)
         cached = await self._cached(key, run, CLAIM_REASONING.name)
         if cached is not None:
+            self._ground(cached, claim, provider, signals, run)
             return cached
         try:
             self._check_budget(run)
@@ -111,8 +113,17 @@ class ClaimReviewAI:
             run.mark_degraded(f"reasoning: {exc}")
             return rules.build_reasoning(claim, signals)
         run.add_events(findings)
+        self._ground(text, claim, provider, signals, run)
         await self.cache.set(key, text, self.settings.cache_ttl_s)
         return text
+
+    def _ground(self, text: str, claim: dict, provider: dict, signals: dict, run: AIRunMetadata) -> None:
+        if not self.settings.grounding_enabled:
+            return
+        report = check_grounding(text, claim, signals, provider)
+        run.grounding = report.as_dict()
+        for number in report.ungrounded:
+            run.add_event(GuardrailFinding("grounding", "warned", f"number not found in source data: {number}"))
 
     # ---------------------------------------------------------- recommendation
     async def recommend(
@@ -184,6 +195,11 @@ class ClaimReviewAI:
     ) -> list[PolicyViolation]:
         """Escalate-only checks that need the LLM output (judge, ...)."""
         violations: list[PolicyViolation] = []
+        ungrounded = (run.grounding or {}).get("ungrounded") or []
+        if run.decision_source == "llm" and len(ungrounded) >= self.settings.grounding_max_ungrounded:
+            violations.append(PolicyViolation(
+                "ungrounded_reasoning", "block", f"reasoning cites numbers not in the data: {', '.join(ungrounded[:3])}"
+            ))
         if (
             self.settings.judge_enabled
             and run.decision_source == "llm"
