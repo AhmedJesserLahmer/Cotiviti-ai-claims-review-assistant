@@ -1,0 +1,16 @@
+claims-review {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" in namespace {{ .Release.Namespace }}.
+
+Components: claims-api{{ if .Values.aiAgent.enabled }}, ai-agent{{ end }}{{ if .Values.mlService.enabled }}, ml-service{{ end }}{{ if .Values.worker.enabled }}, worker{{ end }}{{ if .Values.frontend.enabled }}, frontend{{ end }}
+
+{{- if .Values.ingress.enabled }}
+Dashboard: https://{{ .Values.ingress.hosts.app }}
+API:       https://{{ .Values.ingress.hosts.api }}
+{{- else }}
+Port-forward the dashboard and API:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "claims-review.fullname" . }}-frontend 3000:3000
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "claims-review.fullname" . }}-claims-api 8000:8000
+{{- end }}
+
+{{- if and (eq .Values.global.environment "prod") .Values.secrets.create (not .Values.secrets.existingSecret) (not .Values.secrets.externalSecrets.enabled) }}
+WARNING: production is using a chart-managed Secret. Use secrets.existingSecret or External Secrets.
+{{- end }}
