@@ -59,6 +59,26 @@ CLAIM_REASONING = PromptTemplate(
     ),
 )
 
+# Candidate reasoning prompt for A/B testing: asks the model to quote exact figures
+# (helps the grounding check) and to name the deciding signal.
+CLAIM_REASONING_V2_1 = PromptTemplate(
+    name="claim_reasoning",
+    version="2.1.0",
+    system=CLAIM_REASONING.system,
+    user=(
+        "Reason step-by-step over the ML model outputs for this claim, covering treatment "
+        "appropriateness, payment amount, provider behavior pattern, and billing anomaly "
+        "history. Write 4-6 short numbered steps in plain text, no markdown headers. Quote "
+        "amounts and probabilities exactly as given, and finish with one step naming the "
+        "single signal that matters most for the decision.\n\n"
+        "<claim_data>\n"
+        "Claim: {claim_json}\n"
+        "Provider: {provider_json}\n"
+        "ML signals: {signals_json}\n"
+        "</claim_data>"
+    ),
+)
+
 CLAIM_RECOMMENDATION = PromptTemplate(
     name="claim_recommendation",
     version="2.0.0",
@@ -106,11 +126,54 @@ REPAIR_INSTRUCTION = (
     "Reply again with ONLY a valid JSON object that matches the requested keys and allowed values."
 )
 
+# Default (production) version of each prompt.
 REGISTRY: dict[str, PromptTemplate] = {p.name: p for p in (CLAIM_REASONING, CLAIM_RECOMMENDATION, CLAIM_JUDGE)}
 
+# Every known version, including candidates under experiment.
+VERSIONS: dict[str, dict[str, PromptTemplate]] = {}
+for _template in (CLAIM_REASONING, CLAIM_REASONING_V2_1, CLAIM_RECOMMENDATION, CLAIM_JUDGE):
+    VERSIONS.setdefault(_template.name, {})[_template.version] = _template
 
-def get_prompt(name: str) -> PromptTemplate:
+
+def get_prompt(name: str, version: str | None = None) -> PromptTemplate:
     try:
-        return REGISTRY[name]
+        return VERSIONS[name][version] if version else REGISTRY[name]
     except KeyError as exc:
-        raise KeyError(f"unknown prompt '{name}'; known: {sorted(REGISTRY)}") from exc
+        raise KeyError(f"unknown prompt '{name}@{version or 'default'}'; known: {sorted(VERSIONS)}") from exc
+
+
+def parse_traffic(raw: str) -> dict[str, dict[str, float]]:
+    """``"claim_reasoning@2.1.0=0.2"`` -> {"claim_reasoning": {"2.1.0": 0.2}}."""
+    traffic: dict[str, dict[str, float]] = {}
+    for entry in filter(None, (part.strip() for part in raw.split(","))):
+        try:
+            ident, share = entry.split("=", 1)
+            name, version = ident.strip().split("@", 1)
+            value = float(share)
+        except ValueError as exc:
+            raise ValueError(f"invalid AI_PROMPT_TRAFFIC entry {entry!r}; expected name@version=share") from exc
+        get_prompt(name, version)  # fail fast on unknown versions
+        if not 0 <= value <= 1:
+            raise ValueError(f"traffic share for {ident} must be within [0, 1]")
+        traffic.setdefault(name, {})[version] = value
+    for name, shares in traffic.items():
+        if sum(shares.values()) > 1:
+            raise ValueError(f"traffic shares for {name} add up to more than 1")
+    return traffic
+
+
+def select_prompt(name: str, unit_id: str, traffic: dict[str, dict[str, float]]) -> PromptTemplate:
+    """Deterministic assignment: the same claim always gets the same variant, so a
+    re-analysis is comparable and cached results stay valid."""
+    import hashlib
+
+    shares = traffic.get(name) or {}
+    if not shares:
+        return REGISTRY[name]
+    bucket = int(hashlib.sha256(f"{name}:{unit_id}".encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    threshold = 0.0
+    for version, share in sorted(shares.items()):
+        threshold += share
+        if bucket < threshold:
+            return VERSIONS[name][version]
+    return REGISTRY[name]

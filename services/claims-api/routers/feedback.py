@@ -78,6 +78,12 @@ async def ai_quality(limit: int = 5000):
         bucket = by_source.setdefault(item.get("ai_decision_source") or "unknown", {"total": 0, "agree": 0})
         bucket["total"] += 1
         bucket["agree"] += item["verdict"] == "agree"
+    by_prompt: dict[str, dict[str, int]] = {}
+    for item in feedback:
+        for name, version in (item.get("ai_prompt_versions") or {}).items():
+            bucket = by_prompt.setdefault(f"{name}@{version}", {"total": 0, "agree": 0})
+            bucket["total"] += 1
+            bucket["agree"] += item["verdict"] == "agree"
     unsafe = sum(1 for f in feedback if f["ai_recommendation"] == "approve" and f["final_decision"] != "approve")
 
     return {
@@ -98,5 +104,9 @@ async def ai_quality(limit: int = 5000):
             # AI approved but the human did not: the costly error class.
             "unsafe_approval_rate": _rate(unsafe, sum(1 for f in feedback if f["ai_recommendation"] == "approve")),
             "agreement_by_source": {k: _rate(v["agree"], v["total"]) for k, v in by_source.items()},
+            # Prompt A/B comparison (AI_PROMPT_TRAFFIC): agreement per prompt version.
+            "agreement_by_prompt": {
+                k: {"rate": _rate(v["agree"], v["total"]), "n": v["total"]} for k, v in sorted(by_prompt.items())
+            },
         },
     }

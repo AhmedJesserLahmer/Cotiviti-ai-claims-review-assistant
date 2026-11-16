@@ -32,7 +32,7 @@ from ai_platform.guardrails.output import sanitize_reasoning
 from ai_platform.guardrails.pii import redact_payload
 from ai_platform.guardrails.policy import PolicyDecision, PolicyThresholds, PolicyViolation, enforce_policy
 from ai_platform.judge import audit_approval
-from ai_platform.prompts import CLAIM_REASONING, CLAIM_RECOMMENDATION
+from ai_platform.prompts import CLAIM_RECOMMENDATION, parse_traffic, select_prompt
 from ai_platform.validation.schemas import RecommendationOutput, schema_hint
 from ai_platform.validation.structured import generate_structured
 
@@ -49,6 +49,7 @@ class ClaimReviewAI:
         self.settings = settings
         self.thresholds = PolicyThresholds.from_settings(settings)
         self.cache = cache or NullCache()
+        self.prompt_traffic = parse_traffic(settings.prompt_traffic)
 
     def _key(self, prompt_id: str, messages) -> str:
         return cache_key(prompt_id, messages, model_chain=[slot.label for slot in self.client.slots])
@@ -88,19 +89,20 @@ class ClaimReviewAI:
     # --------------------------------------------------------------- reasoning
     async def reason(self, *, claim: dict, provider: dict, signals: dict, run: AIRunMetadata) -> str:
         claim_view, provider_view = self.prepare_inputs(claim, provider, run)
-        run.use_prompt(CLAIM_REASONING.name, CLAIM_REASONING.version)
+        prompt = select_prompt("claim_reasoning", str(claim.get("claim_id", "")), self.prompt_traffic)
+        run.use_prompt(prompt.name, prompt.version)
 
         if self.client.is_empty:
             run.mark_degraded("LLM disabled (no credentials or offline mode)")
             return rules.build_reasoning(claim, signals)
 
-        messages = CLAIM_REASONING.render(
+        messages = prompt.render(
             claim_json=json.dumps(claim_view, default=str),
             provider_json=json.dumps(provider_view, default=str),
             signals_json=json.dumps(signals, default=str),
         )
-        key = self._key(CLAIM_REASONING.id, messages)
-        cached = await self._cached(key, run, CLAIM_REASONING.name)
+        key = self._key(prompt.id, messages)
+        cached = await self._cached(key, run, prompt.name)
         if cached is not None:
             self._ground(cached, claim, provider, signals, run)
             return cached

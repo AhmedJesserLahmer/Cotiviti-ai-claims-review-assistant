@@ -48,6 +48,10 @@ class AISettings(BaseSettings):
     circuit_failure_threshold: int = Field(default=5, ge=1)
     circuit_recovery_s: float = Field(default=30.0, gt=0)
 
+    # --- prompt experiments -------------------------------------------------------------
+    # Share of claims routed to candidate prompt versions, e.g. "claim_reasoning@2.1.0=0.2".
+    prompt_traffic: str = ""
+
     # --- budgets -----------------------------------------------------------------
     # Hard cap on tokens one analysis may consume (all calls, retries and repairs).
     max_tokens_per_run: int = Field(default=12000, ge=500)

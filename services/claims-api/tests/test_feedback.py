@@ -10,7 +10,8 @@ from tests.fakes import FakeCollection, FakeDB  # noqa: E402
 
 ANALYSES = [
     {"claim_id": "C1", "recommendation": "approve",
-     "ai_metadata": {"run_id": "r1", "decision_source": "llm", "model_used": "m"}},
+     "ai_metadata": {"run_id": "r1", "decision_source": "llm", "model_used": "m",
+                     "prompt_versions": {"claim_reasoning": "2.1.0"}}},
     {"claim_id": "C2", "recommendation": "flag_for_review",
      "ai_metadata": {"run_id": "r2", "decision_source": "rules", "recommendation_overridden": True}},
 ]
@@ -44,3 +45,4 @@ def test_quality_analytics(client):
     assert report["feedback"]["agreement_rate"] == 0.5
     assert report["feedback"]["unsafe_approval_rate"] == 1.0
     assert report["feedback"]["agreement_by_source"] == {"llm": 0.0, "rules": 1.0}
+    assert report["feedback"]["agreement_by_prompt"] == {"claim_reasoning@2.1.0": {"rate": 0.0, "n": 1}}
