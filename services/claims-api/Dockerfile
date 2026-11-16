@@ -8,11 +8,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Dependencies first so code changes do not invalidate the pip layer.
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Built with the repository root as context (see infra/docker/compose.yaml) so the
+# shared library can be installed. Dependencies first for layer caching.
+COPY libs/python/claims-common /opt/claims-common
+COPY services/claims-api/requirements.txt .
+RUN pip install -r requirements.txt /opt/claims-common
 
-COPY . .
+COPY services/claims-api/ .
 
 # Bake synthetic data + trained models into the image so the container is
 # self-contained and reproducible (seeding into Mongo happens at runtime).

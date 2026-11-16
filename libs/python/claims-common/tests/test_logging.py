@@ -8,7 +8,7 @@ pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from core.logging import JsonFormatter, RequestContextMiddleware, request_id_var  # noqa: E402
+from claims_common.logging import JsonFormatter, RequestContextMiddleware, request_id_var  # noqa: E402
 
 
 def make_app():

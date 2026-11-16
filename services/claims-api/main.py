@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from core.logging import RequestContextMiddleware, configure_logging
+from claims_common.logging import RequestContextMiddleware, configure_logging
 from routers import claims, health, providers, seed
 
 configure_logging()

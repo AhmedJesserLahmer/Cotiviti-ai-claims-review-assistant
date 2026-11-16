@@ -62,7 +62,7 @@ class RequestContextMiddleware:
     def __init__(self, app, header: str = "x-request-id"):
         self.app = app
         self.header = header.lower().encode()
-        self.log = logging.getLogger("claims_api.access")
+        self.log = logging.getLogger("claims.access")
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":

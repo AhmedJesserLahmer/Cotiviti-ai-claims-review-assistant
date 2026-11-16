@@ -13,7 +13,9 @@ services:
       retries: 10
 
   backend:
-    build: ../../services/claims-api
+    build:
+      context: ../..
+      dockerfile: services/claims-api/Dockerfile
     container_name: claims_poc_backend
     depends_on:
       mongo:
