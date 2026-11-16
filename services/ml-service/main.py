@@ -13,6 +13,7 @@ app = create_app(
     version="0.1.0",
     readiness_checks=health.READINESS_CHECKS,
     cors=False,
+    internal=True,
 )
 
 app.include_router(scoring.router)

@@ -1,6 +1,7 @@
 """Clients for downstream services, created once per process."""
 
 from claims_common.http import ServiceClient
+from claims_common.internal_auth import internal_headers
 from claims_common.resilience.retry import RetryPolicy
 from core.config import settings
 
@@ -17,6 +18,7 @@ def get_ai_agent() -> ServiceClient:
             timeout_s=settings.ai_agent_timeout_s,
             # Analyses are expensive: retry only once on transport errors / 503.
             retry_policy=RetryPolicy(max_attempts=2, base_delay_s=0.5, max_delay_s=2.0),
+            headers=internal_headers(settings.internal_token),
         )
     return _ai_agent
 
@@ -24,7 +26,9 @@ def get_ai_agent() -> ServiceClient:
 def get_ml_service() -> ServiceClient:
     global _ml_service
     if _ml_service is None:
-        _ml_service = ServiceClient("ml-service", settings.ml_service_url, timeout_s=120.0)
+        _ml_service = ServiceClient(
+            "ml-service", settings.ml_service_url, timeout_s=120.0, headers=internal_headers(settings.internal_token)
+        )
     return _ml_service
 
 
