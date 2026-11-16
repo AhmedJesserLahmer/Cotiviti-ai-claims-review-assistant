@@ -123,6 +123,36 @@ class ServiceClient:
             return None
         return response.json()
 
+    async def stream_bytes(self, method: str, path: str, *, timeout_s: float | None = None, **kwargs):
+        """Yield the response body as it arrives (for SSE proxying).
+
+        No retries: a stream may already have had side effects when it breaks. The
+        circuit breaker still applies, and connection failures raise
+        ServiceUnavailableError before the first chunk.
+        """
+        if not self.breaker.allow_request():
+            raise ServiceUnavailableError(self.name, "circuit open")
+        headers = dict(kwargs.pop("headers", None) or {})
+        request_id = request_id_var.get()
+        if request_id:
+            headers.setdefault("X-Request-ID", request_id)
+        if timeout_s is not None:
+            kwargs["timeout"] = timeout_s
+        try:
+            async with self._client.stream(method, path, headers=headers, **kwargs) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread()).decode(errors="replace")
+                    if response.status_code in RETRYABLE_STATUS:
+                        self.breaker.record_failure()
+                        raise ServiceUnavailableError(self.name, f"HTTP {response.status_code}")
+                    raise ServiceResponseError(self.name, response.status_code, body[:300])
+                self.breaker.record_success()
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            self.breaker.record_failure()
+            raise ServiceUnavailableError(self.name, f"{type(exc).__name__}: {exc}") from exc
+
     async def get(self, path: str, **kwargs) -> Any:
         return await self.request_json("GET", path, **kwargs)
 

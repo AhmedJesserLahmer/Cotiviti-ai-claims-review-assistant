@@ -53,3 +53,15 @@ async def test_agent_errors_are_mapped(monkeypatch, upstream, expected):
     with pytest.raises(HTTPException) as info:
         await analysis.request_analysis("C1")
     assert info.value.status_code == expected
+
+
+async def test_stream_proxy_forwards_events_and_converts_failures(monkeypatch):
+    use(monkeypatch, lambda request: httpx.Response(200, content=b"event: result\ndata: {}\n\n"))
+    assert b"".join([c async for c in analysis.proxy_analysis_stream("C1")]) == b"event: result\ndata: {}\n\n"
+
+    def down(request):
+        raise httpx.ConnectError("refused")
+
+    use(monkeypatch, down)
+    body = b"".join([c async for c in analysis.proxy_analysis_stream("C1")])
+    assert body.startswith(b"event: error") and b"503" in body

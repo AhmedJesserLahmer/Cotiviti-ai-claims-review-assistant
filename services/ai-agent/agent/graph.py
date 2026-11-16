@@ -218,16 +218,48 @@ def get_graph():
     return _compiled_graph
 
 
+def _result(state: dict) -> dict:
+    return {
+        "claim_id": state["claim_id"],
+        "signals": state["signals"],
+        "reasoning": state["reasoning"],
+        "recommendation": state["recommendation"],
+        "recommendation_summary": state["recommendation_summary"],
+        "loops": state.get("loops", 0),
+        "ai_metadata": state["ai_run"].model_dump(),
+    }
+
+
 async def analyze_claim(claim_id: str, *, bypass_cache: bool = False) -> dict:
     graph = get_graph()
     run = AIRunMetadata(cache_bypassed=bypass_cache)
     result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": run})
-    return {
-        "claim_id": result["claim_id"],
-        "signals": result["signals"],
-        "reasoning": result["reasoning"],
-        "recommendation": result["recommendation"],
-        "recommendation_summary": result["recommendation_summary"],
-        "loops": result.get("loops", 0),
-        "ai_metadata": result["ai_run"].model_dump(),
-    }
+    return _result(result)
+
+
+def _stage_payload(node: str, state: dict) -> dict:
+    """What a client may see after each node (no raw patient data)."""
+    payload: dict = {"stage": node, "loops": state.get("loops", 0)}
+    if node == "fetch_claim_context":
+        payload["timeseries_days"] = len(state.get("timeseries_window") or [])
+    elif node == "run_ml_signals":
+        payload["signals"] = state.get("signals")
+    elif node == "reasoning_node":
+        payload["reasoning"] = state.get("reasoning")
+        payload["degraded"] = state["ai_run"].degraded if state.get("ai_run") else False
+    elif node == "recommendation_node":
+        payload["recommendation"] = state.get("recommendation")
+        payload["summary"] = state.get("recommendation_summary")
+    return payload
+
+
+async def stream_analysis(claim_id: str, *, bypass_cache: bool = False):
+    """Yield ("stage", payload) after every graph node, then ("result", AnalysisResult dict)."""
+    graph = get_graph()
+    state: dict = {"claim_id": claim_id, "loops": 0, "ai_run": AIRunMetadata(cache_bypassed=bypass_cache)}
+    async for chunk in graph.astream(dict(state), stream_mode="updates"):
+        for node, update in chunk.items():
+            if update:
+                state.update(update)
+            yield "stage", _stage_payload(node, state)
+    yield "result", _result(state)

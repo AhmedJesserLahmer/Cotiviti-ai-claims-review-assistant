@@ -4,9 +4,9 @@ from datetime import date
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from core.analysis import request_analysis
+from core.analysis import proxy_analysis_stream, request_analysis
 from core.limits import analyze_limit, bulk_limit
 from db.mongo import db
 from models.schemas import AnalysisResult, ClaimOut, ClaimUploadError, ClaimUploadResponse
@@ -58,6 +58,19 @@ async def analyze(claim_id: str, refresh: bool = False):
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     return await request_analysis(claim_id, refresh=refresh)
+
+
+@router.get("/{claim_id}/analyze/stream", dependencies=[analyze_limit])
+async def analyze_stream(claim_id: str, refresh: bool = False):
+    """Server-sent events with live progress of the AI analysis (proxied from ai-agent)."""
+    claim = await db["claims"].find_one({"claim_id": claim_id}, {"_id": 0, "claim_id": 1})
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return StreamingResponse(
+        proxy_analysis_stream(claim_id, refresh=refresh),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/{claim_id}/analysis", response_model=AnalysisResult)

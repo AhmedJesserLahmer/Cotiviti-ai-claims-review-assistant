@@ -10,7 +10,7 @@ from ai_platform.service import get_claim_review_ai
 from claims_common.app import create_app
 from core.clients import close_clients, get_ml_service
 from core.config import settings
-from routers import analyses, health
+from routers import analyses, health, streams
 
 
 @asynccontextmanager
@@ -30,3 +30,4 @@ app = create_app(
 )
 
 app.include_router(analyses.router)
+app.include_router(streams.router)

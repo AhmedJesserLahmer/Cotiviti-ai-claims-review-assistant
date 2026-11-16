@@ -65,3 +65,22 @@ async def test_4xx_is_not_retried_and_carries_detail():
         await make(handler).get("/x")
     assert info.value.status_code == 404 and info.value.detail == "Claim not found"
     assert len(calls) == 1
+
+
+async def test_stream_bytes_passes_chunks_through():
+    def handler(request):
+        return httpx.Response(200, content=b"event: a\ndata: {}\n\n")
+
+    chunks = [c async for c in make(handler).stream_bytes("GET", "/s")]
+    assert b"".join(chunks) == b"event: a\ndata: {}\n\n"
+
+
+async def test_stream_bytes_errors():
+    with pytest.raises(ServiceResponseError):
+        [c async for c in make(lambda r: httpx.Response(404, content=b"nope")).stream_bytes("GET", "/s")]
+
+    def down(request):
+        raise httpx.ConnectError("refused")
+
+    with pytest.raises(ServiceUnavailableError):
+        [c async for c in make(down).stream_bytes("GET", "/s")]
