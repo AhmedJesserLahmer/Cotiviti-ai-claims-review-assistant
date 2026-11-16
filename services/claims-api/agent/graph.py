@@ -1,39 +1,25 @@
 """LangGraph agent that chains reasoning over ML signals for a claim and
-produces an agentic recommendation via Groq.
+produces an agentic recommendation.
 
 Graph:
   fetch_claim_context -> run_ml_signals -> reasoning_node -> recommendation_node
   recommendation_node --(request_more_data, loops < 1)--> fetch_claim_context
   recommendation_node --(otherwise)--> persist_result -> END
+
+All LLM work goes through ai_platform.ClaimReviewAI, which adds retries, timeouts,
+circuit breakers, model fallback, guardrails, schema validation and a deterministic
+fallback. The graph itself stays a pure orchestration of data, ML and AI steps.
 """
 
-import json
-
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
 
 from agent.state import AgentState
-from core.config import settings
+from ai_platform.audit import AIRunMetadata
+from ai_platform.service import get_claim_review_ai
 from db.mongo import db
 from ml.inference import classify_claim, predict_payment
 
 MAX_LOOPS = 1
-
-_llm = None
-
-
-def get_llm() -> ChatGroq:
-    """Lazily construct the Groq client so the backend can boot without a key;
-    it is only required when a claim is actually analyzed."""
-    global _llm
-    if _llm is None:
-        if not settings.groq_api_key or settings.groq_api_key == "your_groq_api_key_here":
-            raise RuntimeError(
-                "GROQ_API_KEY is not set. Add it to your environment / .env to run AI analysis."
-            )
-        _llm = ChatGroq(model=settings.groq_model, api_key=settings.groq_api_key, temperature=0.2)
-    return _llm
 
 
 async def fetch_claim_context(state: AgentState) -> AgentState:
@@ -89,64 +75,32 @@ async def run_ml_signals(state: AgentState) -> AgentState:
 
 
 async def reasoning_node(state: AgentState) -> AgentState:
-    claim, signals, provider = state["claim"], state["signals"], state["provider"]
-
-    prompt = (
-        "You are a healthcare claims review analyst. Reason step-by-step (chain of "
-        "thought) over the ML model outputs below for a single claim, considering "
-        "treatment appropriateness, payment amount, provider behavior pattern, and "
-        "billing anomaly history. Keep it to 4-6 short numbered steps of reasoning, "
-        "plain text, no markdown headers.\n\n"
-        f"Claim: {json.dumps(claim, default=str)}\n"
-        f"Provider: {provider.get('name')} ({provider.get('specialty')}, {provider.get('region')})\n"
-        f"ML Signals: {json.dumps(signals, default=str)}\n"
+    run = state.get("ai_run") or AIRunMetadata()
+    reasoning = await get_claim_review_ai().reason(
+        claim=state["claim"],
+        provider=state["provider"],
+        signals=state["signals"],
+        run=run,
     )
-
-    response = await get_llm().ainvoke([
-        SystemMessage(content="You produce concise, numbered chain-of-thought reasoning for claims review."),
-        HumanMessage(content=prompt),
-    ])
-
-    return {**state, "reasoning": response.content}
+    return {**state, "reasoning": reasoning, "ai_run": run}
 
 
 async def recommendation_node(state: AgentState) -> AgentState:
     loops = state.get("loops", 0)
-
-    prompt = (
-        "Based on the reasoning below, decide a final action for this healthcare claim. "
-        "Respond with ONLY a JSON object with keys 'recommendation' (one of: "
-        "'approve', 'flag_for_review', 'request_more_data') and 'summary' (one sentence "
-        "explaining the decision).\n\n"
-        f"Reasoning:\n{state['reasoning']}\n"
-        f"ML Signals: {json.dumps(state['signals'], default=str)}\n"
+    run = state["ai_run"]
+    decision = await get_claim_review_ai().recommend(
+        claim=state["claim"],
+        signals=state["signals"],
+        reasoning=state["reasoning"],
+        allow_more_data=loops < MAX_LOOPS,
+        run=run,
     )
-    if loops >= MAX_LOOPS:
-        prompt += "\nNote: additional data has already been fetched once; you must not request more data again."
-
-    response = await get_llm().ainvoke([
-        SystemMessage(content="You are a decisive claims review agent. Reply with strict JSON only."),
-        HumanMessage(content=prompt),
-    ])
-
-    try:
-        text = response.content.strip().strip("`").removeprefix("json").strip()
-        parsed = json.loads(text)
-        recommendation = parsed.get("recommendation", "flag_for_review")
-        summary = parsed.get("summary", "")
-    except (json.JSONDecodeError, AttributeError):
-        recommendation, summary = "flag_for_review", "Could not parse agent output; defaulting to manual review."
-
-    if recommendation not in {"approve", "flag_for_review", "request_more_data"}:
-        recommendation = "flag_for_review"
-    if loops >= MAX_LOOPS and recommendation == "request_more_data":
-        recommendation = "flag_for_review"
-
     return {
         **state,
-        "recommendation": recommendation,
-        "recommendation_summary": summary,
-        "loops": loops + (1 if recommendation == "request_more_data" else 0),
+        "recommendation": decision.recommendation,
+        "recommendation_summary": decision.summary,
+        "loops": loops + (1 if decision.recommendation == "request_more_data" else 0),
+        "ai_run": run,
     }
 
 
@@ -205,7 +159,8 @@ def get_graph():
 
 async def analyze_claim(claim_id: str) -> dict:
     graph = get_graph()
-    result = await graph.ainvoke({"claim_id": claim_id, "loops": 0})
+    result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": AIRunMetadata()})
+    result["ai_run"].finish()
     return {
         "claim_id": result["claim_id"],
         "signals": result["signals"],
@@ -213,4 +168,5 @@ async def analyze_claim(claim_id: str) -> dict:
         "recommendation": result["recommendation"],
         "recommendation_summary": result["recommendation_summary"],
         "loops": result.get("loops", 0),
+        "ai_metadata": result["ai_run"].model_dump(),
     }

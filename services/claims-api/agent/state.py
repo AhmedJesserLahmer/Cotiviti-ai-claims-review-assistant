@@ -1,4 +1,6 @@
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
+
+from ai_platform.audit import AIRunMetadata
 
 
 class AgentState(TypedDict, total=False):
@@ -12,3 +14,5 @@ class AgentState(TypedDict, total=False):
     recommendation: str
     recommendation_summary: str
     loops: int
+    # Audit trail of every LLM attempt, guardrail and fallback for this analysis.
+    ai_run: AIRunMetadata
