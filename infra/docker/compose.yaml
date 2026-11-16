@@ -1,3 +1,23 @@
+# Local development stack. Start from the repo root: `docker compose up -d`
+# (or `make up`). Build one service at a time: `make build SERVICE=claims-api`.
+#
+#   browser ─► frontend :3000 ─► claims-api :8000 ─► ai-agent :8002 ─► ml-service :8001
+#                                    │   ▲                │                 │
+#                                    ▼   │ jobs           ▼                 ▼
+#                                  redis ─► claims-worker   └──── mongo ────┘
+#
+# Only the frontend and claims-api publish ports; the other services are internal.
+
+x-python-healthcheck: &python-healthcheck
+  interval: 10s
+  timeout: 3s
+  retries: 6
+
+x-service-env: &service-env
+  MONGO_URI: mongodb://mongo:27017
+  MONGO_DB_NAME: claims_poc
+  LOG_FORMAT: json
+
 services:
   mongo:
     image: mongo:7
@@ -12,28 +32,17 @@ services:
       timeout: 5s
       retries: 10
 
-  backend:
-    build:
-      context: ../..
-      dockerfile: services/claims-api/Dockerfile
-    container_name: claims_poc_backend
-    depends_on:
-      mongo:
-        condition: service_healthy
-      ai-agent:
-        condition: service_started
-    # Optional root .env (e.g. CORS_ORIGINS). Values under `environment` win over
-    # env_file, so the container always talks to the compose-network services.
-    env_file:
-      - path: ../../.env
-        required: false
-    environment:
-      MONGO_URI: mongodb://mongo:27017
-      MONGO_DB_NAME: claims_poc
-      AI_AGENT_URL: http://ai-agent:8002
-      ML_SERVICE_URL: http://ml-service:8001
-    ports:
-      - "8000:8000"
+  redis:
+    image: redis:7-alpine
+    container_name: claims_poc_redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   ml-service:
     build:
@@ -44,11 +53,14 @@ services:
       mongo:
         condition: service_healthy
     environment:
-      MONGO_URI: mongodb://mongo:27017
-      MONGO_DB_NAME: claims_poc
-    # Internal only: reached as http://ml-service:8001.
+      <<: *service-env
+      SERVICE_NAME: ml-service
     expose:
       - "8001"
+    healthcheck:
+      <<: *python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready', timeout=2)"]
+      start_period: 60s
 
   ai-agent:
     build:
@@ -59,18 +71,63 @@ services:
       mongo:
         condition: service_healthy
       ml-service:
-        condition: service_started
+        condition: service_healthy
     # Secrets and AI tuning (GROQ_API_KEY, GROQ_MODEL, AI_*) come from the root .env.
     env_file:
       - path: ../../.env
         required: false
     environment:
-      MONGO_URI: mongodb://mongo:27017
-      MONGO_DB_NAME: claims_poc
+      <<: *service-env
+      SERVICE_NAME: ai-agent
       ML_SERVICE_URL: http://ml-service:8001
-    # Internal only: no published port, reached as http://ai-agent:8002.
     expose:
       - "8002"
+    healthcheck:
+      <<: *python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/ready', timeout=2)"]
+      start_period: 30s
+
+  claims-api:
+    build:
+      context: ../..
+      dockerfile: services/claims-api/Dockerfile
+    container_name: claims_poc_claims_api
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-agent:
+        condition: service_healthy
+    # Optional root .env (e.g. CORS_ORIGINS). Values under `environment` win.
+    env_file:
+      - path: ../../.env
+        required: false
+    environment: &claims-api-env
+      <<: *service-env
+      SERVICE_NAME: claims-api
+      AI_AGENT_URL: http://ai-agent:8002
+      ML_SERVICE_URL: http://ml-service:8001
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  claims-worker:
+    build:
+      context: ../..
+      dockerfile: services/claims-api/Dockerfile
+    container_name: claims_poc_claims_worker
+    entrypoint: ["arq", "core.worker.WorkerSettings"]
+    healthcheck:
+      disable: true
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai-agent:
+        condition: service_healthy
+    environment:
+      <<: *claims-api-env
+      SERVICE_NAME: claims-worker
 
   frontend:
     build:
@@ -80,12 +137,13 @@ services:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     container_name: claims_poc_frontend
     depends_on:
-      - backend
+      - claims-api
     environment:
       # Server-side (SSR) calls stay inside the compose network.
-      INTERNAL_API_BASE_URL: http://backend:8000
+      INTERNAL_API_BASE_URL: http://claims-api:8000
     ports:
       - "3000:3000"
 
 volumes:
   mongo_data:
+  redis_data:

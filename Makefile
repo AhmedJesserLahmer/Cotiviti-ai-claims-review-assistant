@@ -10,7 +10,7 @@ COMPOSE := COMPOSE_PARALLEL_LIMIT=1 docker compose
 SERVICE ?=
 MIN_FREE_MB ?= 4000
 PYTHON ?= python3
-API_DIR := services/claims-api
+PY_PACKAGES := libs/python/claims-common services/ml-service services/ai-agent services/claims-api
 
 .DEFAULT_GOAL := help
 
@@ -31,7 +31,7 @@ env: ## Create a local .env from .env.example if it does not exist
 	@test -f .env || (cp .env.example .env && echo "Created .env, now set GROQ_API_KEY")
 
 .PHONY: build
-build: check-memory ## Build one service image (SERVICE=backend|frontend), or all, sequentially
+build: check-memory ## Build one service image (SERVICE=claims-api|ai-agent|ml-service|frontend), or all, sequentially
 	$(COMPOSE) build --parallel 1 $(SERVICE)
 
 .PHONY: up
@@ -51,13 +51,17 @@ ps: ## Show running services
 	$(COMPOSE) ps
 
 .PHONY: test
-test: ## Run backend unit tests
-	cd $(API_DIR) && $(PYTHON) -m pytest -q
+test: ## Run unit tests of every python package
+	@set -e; for pkg in $(PY_PACKAGES); do echo "== $$pkg"; (cd $$pkg && $(PYTHON) -m pytest -q); done
 
 .PHONY: test-ai
 test-ai: ## Run only the AI reliability layer tests (no ML or DB needed)
-	cd $(API_DIR) && $(PYTHON) -m pytest -q tests/ai
+	cd services/ai-agent && $(PYTHON) -m pytest -q tests/ai
+
+.PHONY: train
+train: ## Generate synthetic data and train a new model version locally
+	cd services/ml-service && $(PYTHON) -m data_gen.generate_data && $(PYTHON) -m ml.train_models
 
 .PHONY: lint
 lint: ## Lint python code with ruff
-	cd $(API_DIR) && $(PYTHON) -m ruff check .
+	$(PYTHON) -m ruff check $(PY_PACKAGES)
