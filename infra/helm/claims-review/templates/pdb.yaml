@@ -1,0 +1,19 @@
+{{- $components := dict "claims-api" .Values.claimsApi "ai-agent" .Values.aiAgent "ml-service" .Values.mlService "frontend" .Values.frontend "worker" .Values.worker }}
+{{- range $component, $v := $components }}
+{{- if and $v.enabled $v.pdb $v.pdb.enabled }}
+---
+# Keeps at least minAvailable pods during voluntary disruptions (node drains, upgrades).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  minAvailable: {{ $v.pdb.minAvailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "claims-review.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}
