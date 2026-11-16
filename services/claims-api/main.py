@@ -4,7 +4,7 @@ from claims_common.app import create_app
 from core.clients import close_clients
 from core.config import settings
 from core.runners import close_runner
-from routers import claims, health, jobs, providers, seed
+from routers import claims, feedback, health, jobs, providers, seed
 
 
 @asynccontextmanager
@@ -27,3 +27,4 @@ app.include_router(seed.router)
 app.include_router(claims.router)
 app.include_router(providers.router)
 app.include_router(jobs.router)
+app.include_router(feedback.router)
