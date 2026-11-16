@@ -1,0 +1,103 @@
+# Alert rules for the Claims Review platform. Loaded by the compose Prometheus and
+# rendered into a PrometheusRule by the Helm chart. Runbooks: docs/runbooks/.
+groups:
+  - name: claims-slo
+    rules:
+      # Availability SLO 99.5% on claims-api (non-5xx). Multi-window burn rate:
+      # fast burn (2% of the 30-day budget in 1h) pages, slow burn tickets.
+      - record: claims:api_error_ratio:rate5m
+        expr: |
+          sum(rate(http_requests_total{service="claims-api",status=~"5.."}[5m]))
+          / clamp_min(sum(rate(http_requests_total{service="claims-api"}[5m])), 1e-9)
+      - record: claims:api_error_ratio:rate1h
+        expr: |
+          sum(rate(http_requests_total{service="claims-api",status=~"5.."}[1h]))
+          / clamp_min(sum(rate(http_requests_total{service="claims-api"}[1h])), 1e-9)
+      - record: claims:api_error_ratio:rate6h
+        expr: |
+          sum(rate(http_requests_total{service="claims-api",status=~"5.."}[6h]))
+          / clamp_min(sum(rate(http_requests_total{service="claims-api"}[6h])), 1e-9)
+      - alert: ClaimsApiErrorBudgetFastBurn
+        expr: claims:api_error_ratio:rate1h > (14.4 * 0.005) and claims:api_error_ratio:rate5m > (14.4 * 0.005)
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: claims-api is burning its error budget fast (>14x)
+          runbook_url: docs/runbooks/api-errors.md
+      - alert: ClaimsApiErrorBudgetSlowBurn
+        expr: claims:api_error_ratio:rate6h > (6 * 0.005) and claims:api_error_ratio:rate1h > (6 * 0.005)
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: claims-api error budget is burning (>6x)
+          runbook_url: docs/runbooks/api-errors.md
+      - alert: ServiceDown
+        expr: up{job=~"claims-api|ai-agent|ml-service"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }} is not being scraped (down?)"
+          runbook_url: docs/runbooks/service-down.md
+
+  - name: claims-ai
+    rules:
+      - record: claims:ai_rule_engine_ratio:rate15m
+        expr: |
+          sum(rate(ai_decisions_total{source="rules"}[15m]))
+          / clamp_min(sum(rate(ai_decisions_total[15m])), 1e-9)
+      - alert: AIDegradedToRuleEngine
+        expr: claims:ai_rule_engine_ratio:rate15m > 0.2
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of decisions are made without an LLM"
+          runbook_url: docs/runbooks/llm-outage.md
+      - alert: AIDegradedToRuleEngineCritical
+        expr: claims:ai_rule_engine_ratio:rate15m > 0.5
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: Most decisions are made by the rule engine; LLM chain is effectively down
+          runbook_url: docs/runbooks/llm-outage.md
+      - alert: AICircuitOpen
+        expr: max by (breaker) (ai_circuit_state) == 2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Circuit {{ $labels.breaker }} is open"
+          runbook_url: docs/runbooks/circuit-open.md
+      - alert: AIPolicyOverrideSpike
+        expr: |
+          sum(rate(ai_policy_overrides_total[30m])) / clamp_min(sum(rate(ai_decisions_total{source="llm"}[30m])), 1e-9) > 0.4
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: Guardrails are escalating >40% of LLM decisions (model or prompt regression?)
+          runbook_url: docs/runbooks/model-regression.md
+      - alert: AILLMLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, model) (rate(ai_llm_attempt_duration_seconds_bucket[10m]))) > 15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 LLM latency for {{ $labels.model }} is {{ $value | humanizeDuration }}"
+          runbook_url: docs/runbooks/llm-outage.md
+      - alert: AIPromptInjectionBurst
+        expr: sum(increase(ai_guardrail_events_total{guardrail="prompt_injection",action="blocked"}[10m])) > 5
+        labels: {severity: warning}
+        annotations:
+          summary: Repeated prompt-injection attempts in uploaded claims
+          runbook_url: docs/runbooks/prompt-injection.md
+      - alert: AISpendHigh
+        expr: sum(rate(ai_llm_estimated_cost_usd_total[1h])) * 3600 > 5
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Estimated LLM spend is {{ $value | printf \"%.2f\" }} USD/hour"
+          runbook_url: docs/runbooks/llm-cost.md
+      - alert: MLOutOfDistributionSurge
+        expr: sum(rate(ml_out_of_distribution_total[30m])) / clamp_min(sum(rate(ml_predictions_total[30m])), 1e-9) > 0.1
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: ">10% of scored claims are unlike the training data (data drift?)"
+          runbook_url: docs/runbooks/model-regression.md
