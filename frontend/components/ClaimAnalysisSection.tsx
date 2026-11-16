@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { AnalysisResult } from "@/lib/types";
 import SignalsPanel from "./SignalsPanel";
 import ReasoningNarrative from "./ReasoningNarrative";
+import AIReliabilityPanel from "./AIReliabilityPanel";
 
 export default function ClaimAnalysisSection({
   claimId,
@@ -67,6 +68,7 @@ export default function ClaimAnalysisSection({
         <>
           <SignalsPanel signals={analysis.signals} />
           <ReasoningNarrative analysis={analysis} />
+          {analysis.ai_metadata && <AIReliabilityPanel meta={analysis.ai_metadata} />}
         </>
       )}
     </div>
