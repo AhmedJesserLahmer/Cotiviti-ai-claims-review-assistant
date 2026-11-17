@@ -1,0 +1,33 @@
+# Staging follows master automatically (CI updates global.imageTag to the commit SHA).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: claims-review-staging
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: claims-review
+  source:
+    repoURL: https://github.com/example/claims-review.git
+    targetRevision: master
+    path: infra/helm/claims-review
+    helm:
+      valueFiles: [values-staging.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: claims-review-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: {duration: 10s, factor: 2, maxDuration: 3m}
+  ignoreDifferences:
+    # Replicas are owned by the HPAs.
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]

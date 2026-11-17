@@ -1,0 +1,32 @@
+# Production tracks release tags and is synced manually by release managers within
+# the project's sync window. Promote by changing targetRevision to a new tag.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: claims-review-prod
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: claims-review
+  source:
+    repoURL: https://github.com/example/claims-review.git
+    targetRevision: v0.3.0
+    path: infra/helm/claims-review
+    helm:
+      valueFiles: [values-prod.yaml]
+      parameters:
+        - name: global.imageTag
+          value: "0.3.0"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: claims-review-prod
+  syncPolicy:
+    # No automated sync: production changes are explicit.
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PruneLast=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]

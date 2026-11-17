@@ -1,0 +1,48 @@
+# Argo CD project: limits what the claims-review applications may deploy and where.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: claims-review
+  namespace: argocd
+spec:
+  description: AI claims review platform
+  # Replace with this repository's URL.
+  sourceRepos:
+    - https://github.com/example/claims-review.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: claims-review-staging
+    - server: https://kubernetes.default.svc
+      namespace: claims-review-prod
+  # Namespaced resources the chart renders; nothing cluster-scoped is allowed.
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - {group: "", kind: ConfigMap}
+    - {group: "", kind: Secret}
+    - {group: "", kind: Service}
+    - {group: "", kind: ServiceAccount}
+    - {group: "", kind: PersistentVolumeClaim}
+    - {group: apps, kind: Deployment}
+    - {group: apps, kind: StatefulSet}
+    - {group: batch, kind: Job}
+    - {group: batch, kind: CronJob}
+    - {group: autoscaling, kind: HorizontalPodAutoscaler}
+    - {group: policy, kind: PodDisruptionBudget}
+    - {group: networking.k8s.io, kind: Ingress}
+    - {group: networking.k8s.io, kind: NetworkPolicy}
+    - {group: external-secrets.io, kind: ExternalSecret}
+    - {group: monitoring.coreos.com, kind: ServiceMonitor}
+    - {group: monitoring.coreos.com, kind: PrometheusRule}
+  roles:
+    - name: release-managers
+      description: May sync production
+      policies:
+        - p, proj:claims-review:release-managers, applications, sync, claims-review/*, allow
+      groups: [claims-review-release-managers]
+  syncWindows:
+    # Production changes only during staffed hours on weekdays.
+    - kind: allow
+      schedule: "0 8 * * 1-5"
+      duration: 9h
+      applications: [claims-review-prod]
+      manualSync: true
