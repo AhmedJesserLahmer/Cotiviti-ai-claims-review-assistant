@@ -1,0 +1,78 @@
+name: infra
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/**", "docker-compose.yml"]
+  push:
+    branches: [master]
+    paths: ["infra/**", ".github/workflows/**", "docker-compose.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHART: infra/helm/claims-review
+
+jobs:
+  helm:
+    name: helm (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, staging, prod]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Lint (includes values.schema.json)
+        run: helm lint "$CHART" --strict -f "$CHART/values-${{ matrix.env }}.yaml"
+      - name: Render
+        run: helm template claims-review "$CHART" -f "$CHART/values-${{ matrix.env }}.yaml" > rendered.yaml
+      - name: Validate manifests (Kubernetes + CRD schemas)
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -strict -summary -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            rendered.yaml
+
+  prometheus-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check rules
+        run: |
+          docker run --rm -v "$PWD:/work" --entrypoint promtool prom/prometheus:v2.55.1 \
+            check rules /work/infra/helm/claims-review/files/prometheus/ai-alerts.yml
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate (no backend, no credentials)
+        working-directory: infra/terraform/environments/prod
+        run: terraform init -backend=false -input=false && terraform validate
+
+  compose-and-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config -q && docker compose --profile observability config -q
+      - name: actionlint
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.4/scripts/download-actionlint.bash) 1.7.4
+          ./actionlint -color
