@@ -1,6 +1,14 @@
 import { BrainCircuit, CheckCircle2, Flag, HelpCircle, LucideIcon } from "lucide-react";
 import { AnalysisResult } from "@/lib/types";
 
+// LLMs often emphasise with Markdown (**High**). Render only that, as React elements:
+// the text is untrusted model output, so it is never injected as HTML.
+function withBold(text: string) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 === 1 ? <strong key={i} className="font-extrabold text-cotiviti-ink">{part}</strong> : part
+  );
+}
+
 const RECOMMENDATION: Record<
   AnalysisResult["recommendation"],
   { classes: string; label: string; Icon: LucideIcon }
@@ -25,10 +33,10 @@ export default function ReasoningNarrative({ analysis }: { analysis: AnalysisRes
         </span>
       </div>
       <p className="whitespace-pre-line text-sm font-semibold leading-relaxed text-cotiviti-ink/80">
-        {analysis.reasoning}
+        {withBold(analysis.reasoning)}
       </p>
       <p className="mt-4 rounded-xl border-[2.5px] border-cotiviti-ink bg-cotiviti-lav px-3 py-2 text-sm font-extrabold text-cotiviti-ink">
-        {analysis.recommendation_summary}
+        {withBold(analysis.recommendation_summary)}
       </p>
       {analysis.loops > 0 && (
         <p className="mt-2 text-xs font-semibold text-cotiviti-ink/50">
