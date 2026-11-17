@@ -1,0 +1,44 @@
+# Staging: production topology at smaller scale; in-chart data stores; secrets from
+# the secret manager; TLS ingress; monitoring on.
+global:
+  environment: staging
+  imageTag: ""   # set by CI/Argo CD to the commit SHA under test
+
+secrets:
+  create: false
+  externalSecrets:
+    enabled: true
+    remoteKey: claims-review/staging
+
+claimsApi:
+  env:
+    CORS_ORIGINS: "https://claims.staging.example.com"
+    AUTH_ENABLED: "true"
+    JWT_ISSUER: "https://idp.staging.example.com/realms/claims"
+  autoscaling: {minReplicas: 2, maxReplicas: 4}
+aiAgent:
+  env:
+    AI_JUDGE_ENABLED: "true"
+    AI_PROMPT_TRAFFIC: "claim_reasoning@2.1.0=0.5"   # evaluate the candidate prompt
+  autoscaling: {minReplicas: 2, maxReplicas: 4}
+
+ingress:
+  enabled: true
+  hosts:
+    app: claims.staging.example.com
+    api: api.claims.staging.example.com
+  tls:
+    clusterIssuer: letsencrypt-staging
+  oauth2Proxy:
+    enabled: true
+    authUrl: "https://oauth2.staging.example.com/oauth2/auth"
+    signinUrl: "https://oauth2.staging.example.com/oauth2/start?rd=$scheme://$host$request_uri"
+
+training:
+  enabled: true
+
+observability:
+  otlpEndpoint: http://otel-collector.monitoring:4318
+  serviceMonitor: {enabled: true}
+  prometheusRule: {enabled: true}
+  grafanaDashboard: {enabled: true}
