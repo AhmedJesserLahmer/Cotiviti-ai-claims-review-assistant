@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from claims_common.contracts import ScoreRequest
 from core.analysis import proxy_analysis_stream, request_analysis
 from core.audit import get_audit_log
 from core.config import settings
@@ -33,6 +34,33 @@ TEXT_COLUMNS = (
     "diagnosis_code", "treatment_type", "status", "claim_date",
 )
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _contract_max_length(field: str) -> int:
+    for constraint in ScoreRequest.model_fields[field].metadata:
+        if getattr(constraint, "max_length", None) is not None:
+            return constraint.max_length
+    raise LookupError(f"ScoreRequest.{field} has no max_length")
+
+
+# Upper bounds for stored text. Fields sent to ml-service take the scoring contract's
+# limit, so a claim that is accepted here can always be scored (no 500 at analysis).
+MAX_TEXT_LENGTHS = {
+    "claim_id": 64,
+    "patient_id": 64,
+    "provider_id": _contract_max_length("provider_id"),
+    "procedure_code": _contract_max_length("procedure_code"),
+    "diagnosis_code": 20,
+    "treatment_type": _contract_max_length("treatment_type"),
+    "status": 32,
+    "claim_date": 32,
+}
+
+
+def too_long_column(row) -> str | None:
+    return next(
+        (c for c, limit in MAX_TEXT_LENGTHS.items() if len(_clean_str(row.get(c))) > limit), None
+    )
 
 
 def is_formula_like(value) -> bool:
@@ -161,6 +189,13 @@ async def upload_claims(
         if formula_column:
             errors.append(ClaimUploadError(
                 row=row_num, reason=f"'{formula_column}' looks like a spreadsheet formula (CSV injection)"
+            ))
+            continue
+
+        long_column = too_long_column(row)
+        if long_column:
+            errors.append(ClaimUploadError(
+                row=row_num, reason=f"'{long_column}' is longer than {MAX_TEXT_LENGTHS[long_column]} characters"
             ))
             continue
 
