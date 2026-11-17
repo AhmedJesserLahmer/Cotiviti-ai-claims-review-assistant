@@ -1,0 +1,44 @@
+name: e2e
+
+# Full stack in compose with the AI in offline mode (deterministic rule engine).
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AI_OFFLINE_MODE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack (one build at a time)
+        run: |
+          printf 'AI_OFFLINE_MODE=true\nINTERNAL_TOKEN=ci-internal-token\n' > .env
+          COMPOSE_PARALLEL_LIMIT=1 docker compose build --parallel 1
+          docker compose up -d --wait --wait-timeout 300
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright
+        working-directory: e2e
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run tests
+        working-directory: e2e
+        run: npx playwright test
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          if-no-files-found: ignore
+      - if: always()
+        run: docker compose down -v
