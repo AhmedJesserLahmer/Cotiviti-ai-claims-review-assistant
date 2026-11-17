@@ -10,6 +10,7 @@ except registry.ModelNotFoundError:
     pytest.skip("models not trained yet (run: python -m ml.train_models)", allow_module_level=True)
 
 SAMPLE_CLAIM = {
+    "provider_id": "PRV0003",
     "billed_amount": 5200.0,
     "length_of_stay": 3,
     "prior_claims_count": 2,
@@ -42,4 +43,6 @@ def test_active_version_has_all_artifacts_and_metrics():
         assert (path / f"{name}.joblib").exists(), f"missing {name}"
     manifest = registry.load_bundle().manifest
     assert 0 <= manifest["metrics"]["classifier"]["accuracy"] <= 1
+    # Quality bar for the risk classifier (cross-validated, noise ceiling ~0.61).
+    assert manifest["metrics"]["classifier"]["cv_macro_f1_mean"] >= 0.6
     assert manifest["metrics"]["predictor"]["mae"] >= 0

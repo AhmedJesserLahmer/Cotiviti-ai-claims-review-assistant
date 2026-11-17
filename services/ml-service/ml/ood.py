@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 
 NUMERIC_FEATURES = ("billed_amount", "length_of_stay", "prior_claims_count", "age", "provider_avg_claim_amount")
-CATEGORICAL_FEATURES = ("treatment_type", "procedure_code")
+CATEGORICAL_FEATURES = ("treatment_type", "procedure_code", "provider_id")
 # Allow some slack beyond the observed range before flagging.
 RANGE_SLACK = 0.25
 
@@ -21,12 +21,16 @@ RANGE_SLACK = 0.25
 def build_profile(df: pd.DataFrame) -> dict[str, Any]:
     numeric = {}
     for name in NUMERIC_FEATURES:
+        if name not in df.columns:
+            continue
         column = df[name].astype(float)
         numeric[name] = {
             "min": float(column.min()), "max": float(column.max()),
             "p01": float(column.quantile(0.01)), "p99": float(column.quantile(0.99)),
         }
-    categorical = {name: sorted(df[name].astype(str).unique().tolist()) for name in CATEGORICAL_FEATURES}
+    categorical = {
+        name: sorted(df[name].astype(str).unique().tolist()) for name in CATEGORICAL_FEATURES if name in df.columns
+    }
     return {"numeric": numeric, "categorical": categorical}
 
 

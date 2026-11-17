@@ -77,6 +77,7 @@ async def score_claim(claim: dict, patient: dict, provider: dict) -> ScoreRespon
         procedure_code=claim["procedure_code"],
         patient_age=patient["age"],
         provider_avg_claim_amount=provider.get("avg_claim_amount", claim["billed_amount"]),
+        provider_id=claim.get("provider_id"),
     )
     body = await get_ml_service().post("/v1/score", json=request.model_dump())
     return ScoreResponse.model_validate(body)
