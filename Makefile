@@ -34,6 +34,14 @@ env: ## Create a local .env from .env.example if it does not exist
 build: check-memory ## Build one service image (SERVICE=claims-api|ai-agent|ml-service|frontend), or all, sequentially
 	$(COMPOSE) build --parallel 1 $(SERVICE)
 
+.PHONY: k8s-local
+k8s-local: ## Build images one by one, load into kind and install the Helm chart
+	infra/k8s/scripts/deploy-local.sh $(SERVICE)
+
+.PHONY: helm-lint
+helm-lint: ## Lint the Helm chart with every environment's values
+	@for env in dev staging prod; do helm lint infra/helm/claims-review -f infra/helm/claims-review/values-$$env.yaml; done
+
 .PHONY: up
 up: ## Start the stack in the background
 	$(COMPOSE) up -d $(SERVICE)
