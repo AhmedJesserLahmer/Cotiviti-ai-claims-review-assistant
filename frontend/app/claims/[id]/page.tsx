@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, DollarSign, BadgeDollarSign, BedDouble, ClipboardCheck } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatUSD } from "@/lib/format";
 import RiskBadge from "@/components/RiskBadge";
 import ClaimAnalysisSection from "@/components/ClaimAnalysisSection";
 
@@ -18,8 +19,8 @@ export default async function ClaimDetailPage({
   const analysis = await api.getAnalysis(id).catch(() => null);
 
   const stats = [
-    { label: "Billed", value: `$${claim.billed_amount.toLocaleString()}`, Icon: DollarSign, color: "bg-cotiviti-violet" },
-    { label: "Paid", value: `$${claim.paid_amount.toLocaleString()}`, Icon: BadgeDollarSign, color: "bg-cotiviti-teal" },
+    { label: "Billed", value: formatUSD(claim.billed_amount), Icon: DollarSign, color: "bg-cotiviti-violet" },
+    { label: "Paid", value: formatUSD(claim.paid_amount), Icon: BadgeDollarSign, color: "bg-cotiviti-teal" },
     { label: "Length of Stay", value: `${claim.length_of_stay} day(s)`, Icon: BedDouble, color: "bg-cotiviti-gold" },
     { label: "Status", value: claim.status, Icon: ClipboardCheck, color: "bg-cotiviti-magenta" },
   ];

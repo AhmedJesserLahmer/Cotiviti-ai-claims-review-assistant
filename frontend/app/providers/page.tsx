@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Radar, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatUSDWhole } from "@/lib/format";
 import ProviderSparkline from "@/components/ProviderSparkline";
 
 export default async function ProvidersIndexPage() {
@@ -61,7 +62,7 @@ export default async function ProvidersIndexPage() {
               <div className="mt-3 flex items-center justify-between text-xs font-bold text-cotiviti-ink/70">
                 <span className="inline-flex items-center gap-1">
                   <Wallet size={13} strokeWidth={3} className="text-cotiviti-teal" />
-                  Avg billed: ${provider.avg_billed.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  Avg billed: {formatUSDWhole(provider.avg_billed)}
                 </span>
                 <span className={anomalyCount > 0 ? "text-cotiviti-coral" : "text-cotiviti-ink/40"}>
                   {anomalyCount} anomal{anomalyCount === 1 ? "y" : "ies"}

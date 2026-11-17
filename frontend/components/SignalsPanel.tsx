@@ -1,4 +1,5 @@
 import { Tags, TrendingUp, Users, Radar, LucideIcon } from "lucide-react";
+import { formatUSD } from "@/lib/format";
 import { MLSignals } from "@/lib/types";
 import RiskBadge from "./RiskBadge";
 
@@ -15,7 +16,7 @@ export default function SignalsPanel({ signals }: { signals: MLSignals }) {
       </Card>
       <Card title="Prediction" Icon={TrendingUp} color="bg-cotiviti-teal">
         <p className="font-display text-2xl font-bold text-cotiviti-ink">
-          ${signals.predicted_paid_amount.toLocaleString()}
+          {formatUSD(signals.predicted_paid_amount)}
         </p>
         <p className="mt-1 text-xs font-semibold text-cotiviti-ink/60">predicted paid amount</p>
       </Card>

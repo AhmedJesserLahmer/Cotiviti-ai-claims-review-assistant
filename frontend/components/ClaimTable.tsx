@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FileText, Building2, ArrowRight } from "lucide-react";
+import { formatUSD } from "@/lib/format";
 import { Claim } from "@/lib/types";
 import RiskBadge from "./RiskBadge";
 
@@ -46,7 +47,7 @@ export default function ClaimTable({ claims }: { claims: Claim[] }) {
               </td>
               <td className="px-4 py-2.5 font-semibold text-cotiviti-ink">{claim.treatment_type}</td>
               <td className="px-4 py-2.5 font-extrabold text-cotiviti-ink">
-                ${claim.billed_amount.toLocaleString()}
+                {formatUSD(claim.billed_amount)}
               </td>
               <td className="px-4 py-2.5 font-semibold text-cotiviti-ink/80">{claim.status}</td>
               <td className="px-4 py-2.5">
