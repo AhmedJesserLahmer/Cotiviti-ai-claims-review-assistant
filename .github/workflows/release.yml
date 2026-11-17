@@ -1,0 +1,44 @@
+name: release
+
+# Conventional commits on master drive per-component versions and changelogs:
+# release-please keeps a release PR open; merging it tags <component>-v<version>.
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      chart_released: ${{ steps.release.outputs['infra/helm/claims-review--release_created'] }}
+      chart_version: ${{ steps.release.outputs['infra/helm/claims-review--version'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-chart:
+    name: publish Helm chart to GHCR (OCI)
+    needs: release-please
+    if: needs.release-please.outputs.chart_released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Package and push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm package infra/helm/claims-review --version "${{ needs.release-please.outputs.chart_version }}"
+          helm push claims-review-*.tgz "oci://ghcr.io/${{ github.repository_owner }}/charts"
