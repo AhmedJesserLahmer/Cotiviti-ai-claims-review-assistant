@@ -1,0 +1,125 @@
+name: images
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    paths: ["services/**", "libs/**", "frontend/**", ".github/workflows/images.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.matrix.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            common: ['libs/python/claims-common/**']
+            claims-api: ['services/claims-api/**']
+            ai-agent: ['services/ai-agent/**']
+            ml-service: ['services/ml-service/**']
+            frontend: ['frontend/**']
+      - id: matrix
+        run: |
+          all='["claims-api","ai-agent","ml-service","frontend"]'
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then echo "images=$all" >> "$GITHUB_OUTPUT"; exit 0; fi
+          outputs='${{ toJSON(steps.filter.outputs) }}'
+          jq -c --argjson all "$all" '
+            . as $o | $all | map(select($o[.] == "true" or ($o.common == "true" and . != "frontend")))
+          ' <<< "$outputs" | sed 's/^/images=/' >> "$GITHUB_OUTPUT"
+
+  build:
+    name: image (${{ matrix.image }})
+    needs: changes
+    if: needs.changes.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write        # push to GHCR
+      id-token: write        # keyless cosign signing
+      attestations: write
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build context
+        id: ctx
+        run: |
+          if [[ "${{ matrix.image }}" == "frontend" ]]; then
+            echo "context=frontend" >> "$GITHUB_OUTPUT"; echo "file=frontend/Dockerfile" >> "$GITHUB_OUTPUT"
+          else
+            echo "context=." >> "$GITHUB_OUTPUT"; echo "file=services/${{ matrix.image }}/Dockerfile" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build (load for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.file }}
+          load: true
+          tags: scan/${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000' }}
+      - name: Trivy image scan (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: scan/${{ matrix.image }}:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Push with SBOM and provenance
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000' }}
+      - uses: sigstore/cosign-installer@v3
+        if: github.event_name != 'pull_request'
+      - name: Sign image (keyless, GitHub OIDC)
+        if: github.event_name != 'pull_request'
+        run: cosign sign --yes "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}"
