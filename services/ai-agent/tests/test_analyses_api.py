@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("langgraph")
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from routers import analyses  # noqa: E402
 
 SIGNALS = {

@@ -7,7 +7,7 @@ model, prompt versions, overrides), so agreement can be sliced by any of them.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -60,7 +60,7 @@ async def submit_feedback(claim_id: str, body: FeedbackIn, principal: Principal 
         "ai_model": meta.get("model_used"),
         "ai_prompt_versions": meta.get("prompt_versions"),
         "ai_policy_override": meta.get("recommendation_overridden", False),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     await db["claim_feedback"].insert_one(dict(record))
     await get_audit_log().append(

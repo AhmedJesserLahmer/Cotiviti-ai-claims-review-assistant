@@ -4,9 +4,9 @@ import pytest
 
 pytest.importorskip("langgraph")
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from agent import graph  # noqa: E402
 from routers import streams  # noqa: E402
 from tests.test_analyses_api import SIGNALS, FakeCollection, FakeDB  # noqa: E402

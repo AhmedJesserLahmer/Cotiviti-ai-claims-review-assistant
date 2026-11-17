@@ -1,6 +1,6 @@
 import pytest
 
-from ai_platform.prompts import CLAIM_RECOMMENDATION, CLAIM_REASONING, get_prompt
+from ai_platform.prompts import CLAIM_REASONING, CLAIM_RECOMMENDATION, get_prompt
 
 
 def test_reasoning_prompt_fences_untrusted_data():

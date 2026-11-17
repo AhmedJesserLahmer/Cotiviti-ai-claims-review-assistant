@@ -21,7 +21,7 @@ import hmac
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from prometheus_client import Counter
@@ -36,7 +36,8 @@ SIGNED_FIELDS = ("seq", "ts", "event_type", "actor", "subject", "data")
 
 
 def _canonical(entry: dict[str, Any]) -> bytes:
-    return json.dumps({k: entry.get(k) for k in SIGNED_FIELDS}, sort_keys=True, separators=(",", ":"), default=str).encode()
+    signed = {k: entry.get(k) for k in SIGNED_FIELDS}
+    return json.dumps(signed, sort_keys=True, separators=(",", ":"), default=str).encode()
 
 
 def sign(entry: dict[str, Any], key: str) -> str:
@@ -72,11 +73,13 @@ class AuditLog:
         )
         return int(counter["seq"])
 
-    async def append(self, event_type: str, *, actor: str, subject: str, data: dict[str, Any] | None = None) -> dict | None:
+    async def append(
+        self, event_type: str, *, actor: str, subject: str, data: dict[str, Any] | None = None
+    ) -> dict | None:
         try:
             entry = {
                 "seq": await self._next_seq(),
-                "ts": datetime.now(timezone.utc).isoformat(),
+                "ts": datetime.now(UTC).isoformat(),
                 "event_type": event_type,
                 "actor": actor,
                 "subject": subject,

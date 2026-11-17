@@ -24,7 +24,7 @@ async def with_timeout(
 ) -> T:
     try:
         return await asyncio.wait_for(awaitable, timeout=seconds)
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise LLMTimeoutError(
             f"no response within {seconds:g}s", provider=provider, model=model
         ) from exc

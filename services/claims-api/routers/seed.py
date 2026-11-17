@@ -16,5 +16,7 @@ async def seed_database(principal: Principal = Depends(get_principal)):
         result = await get_ml_service().post("/v1/seed")
     except ServiceError as exc:
         raise HTTPException(status_code=503, detail=f"Seeding failed: {exc}") from exc
-    await get_audit_log().append("dataset.seed", actor=principal.subject, subject="dataset", data=result.get("counts", {}))
+    await get_audit_log().append(
+        "dataset.seed", actor=principal.subject, subject="dataset", data=result.get("counts", {})
+    )
     return result

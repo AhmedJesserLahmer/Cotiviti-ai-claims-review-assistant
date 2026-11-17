@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("motor")
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from routers import feedback  # noqa: E402
 from tests.fakes import FakeCollection, FakeDB  # noqa: E402
 
@@ -49,8 +49,8 @@ def test_quality_analytics(client):
 
 
 def test_feedback_is_audited_and_the_log_verifies(client, monkeypatch):
-    from core import audit
     from claims_common.audit_log import AuditLog
+    from core import audit
 
     audit_db = FakeDB()
     monkeypatch.setattr(audit, "_audit", AuditLog(audit_db, hmac_key="k" * 32))

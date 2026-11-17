@@ -1,0 +1,19 @@
+# Shared lint configuration for every Python package in the monorepo.
+target-version = "py311"
+line-length = 120
+extend-exclude = ["**/data", "**/ml/models", "**/venv", "**/.venv"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+# B008: FastAPI's Depends()/File()/Form() defaults are the framework's idiom.
+ignore = ["B008"]
+
+[lint.per-file-ignores]
+# Tests favour readable one-line fixtures over wrapping.
+"**/tests/**" = ["E501", "B018"]
+"**/evals/**" = ["E501"]
+
+[lint.isort]
+known-first-party = [
+    "claims_common", "agent", "ai_platform", "core", "data_gen", "db", "evals", "ml", "models", "routers",
+]

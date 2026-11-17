@@ -146,9 +146,8 @@ class ResilientLLMClient:
             attempt_no += 1
             started = time.perf_counter()
             try:
-                with span(
-                    "llm.generate", **{"llm.provider": provider.name, "llm.model": provider.model, "llm.attempt": attempt_no}
-                ) as current:
+                attributes = {"llm.provider": provider.name, "llm.model": provider.model, "llm.attempt": attempt_no}
+                with span("llm.generate", **attributes) as current:
                     response = await with_timeout(
                         provider.generate(messages, temperature=temperature, max_tokens=max_tokens),
                         self.timeout_s,
