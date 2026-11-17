@@ -1,0 +1,9 @@
+# Reviews required per area. Replace the team handles with real GitHub teams.
+*                                   @example/claims-review-maintainers
+/services/ai-agent/ai_platform/     @example/ai-safety
+/services/ai-agent/evals/           @example/ai-safety
+/services/ml-service/               @example/ml
+/infra/                             @example/platform
+/.github/workflows/                 @example/platform
+/libs/python/claims-common/src/claims_common/auth.py         @example/security
+/libs/python/claims-common/src/claims_common/audit_log.py    @example/security
