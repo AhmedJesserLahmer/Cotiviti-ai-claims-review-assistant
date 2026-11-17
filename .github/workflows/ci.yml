@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: detect changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            common: ['libs/python/claims-common/**', 'ruff.toml']
+            claims-api: ['services/claims-api/**']
+            ai-agent: ['services/ai-agent/**']
+            ml-service: ['services/ml-service/**']
+            frontend: ['frontend/**']
+      - id: matrix
+        # A change to the shared library re-tests every service that depends on it.
+        run: |
+          pkgs=()
+          common=${{ steps.filter.outputs.common }}
+          [[ $common == true ]] && pkgs+=("libs/python/claims-common")
+          for svc in claims-api ai-agent ml-service; do
+            changed=$(jq -r --arg s "$svc" '.[$s]' <<< '${{ toJSON(steps.filter.outputs) }}')
+            if [[ $changed == true || $common == true || "${{ github.event_name }}" == "push" ]]; then
+              pkgs+=("services/$svc")
+            fi
+          done
+          [[ "${{ github.event_name }}" == "push" ]] && pkgs+=("libs/python/claims-common")
+          printf 'packages=%s\n' "$(printf '%s\n' "${pkgs[@]}" | sort -u | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  python:
+    name: python (${{ matrix.package }})
+    needs: changes
+    if: needs.changes.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.packages) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install "${GITHUB_WORKSPACE}/libs/python/claims-common[otel,redis]" ruff==0.8.4 pytest pytest-asyncio
+      - name: Lint
+        run: ruff check . --config "${GITHUB_WORKSPACE}/ruff.toml"
+      - name: Train models (ml-service tests use the real registry)
+        if: matrix.package == 'services/ml-service'
+        run: python -m data_gen.generate_data && python -m ml.train_models
+      - name: Test
+        run: python -m pytest -q --junitxml=junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-${{ strategy.job-index }}
+          path: ${{ matrix.package }}/junit.xml
