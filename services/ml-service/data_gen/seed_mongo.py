@@ -1,10 +1,15 @@
 """Loads the generated CSVs in backend/data/ into MongoDB collections.
 
-Run with: python -m data_gen.seed_mongo
+Run with: python -m data_gen.seed_mongo [--if-empty]
+
+Without a flag it is a full reset: it replaces every seeded collection and deletes stored
+analyses. ``--if-empty`` (used at container start) leaves a database that already holds
+claims untouched, so restarting ml-service no longer wipes uploaded claims and analyses.
 """
 
 import asyncio
 import os
+import sys
 
 import pandas as pd
 
@@ -20,7 +25,11 @@ COLLECTIONS = {
 }
 
 
-async def seed():
+async def seed(only_if_empty: bool = False) -> dict[str, int]:
+    if only_if_empty and await db["claims"].estimated_document_count() > 0:
+        print("MongoDB already holds claims; skipping seed.")
+        return {}
+
     counts = {}
     for filename, collection_name in COLLECTIONS.items():
         path = os.path.join(DATA_DIR, filename)
@@ -40,4 +49,4 @@ async def seed():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    asyncio.run(seed(only_if_empty="--if-empty" in sys.argv[1:]))

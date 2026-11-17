@@ -19,8 +19,10 @@ else:
 PY
 
 if [ "${SEED_ON_START:-true}" = "true" ]; then
-  echo "Seeding MongoDB..."
-  python -m data_gen.seed_mongo
+  # Seed only an empty database; a restart must not wipe uploaded claims.
+  # POST /seed is still a deliberate full reset.
+  echo "Seeding MongoDB (if empty)..."
+  python -m data_gen.seed_mongo --if-empty
 fi
 
 echo "Starting ml-service..."
