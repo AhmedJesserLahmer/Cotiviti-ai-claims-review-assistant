@@ -154,3 +154,14 @@ async def test_persist_result_writes_a_signed_audit_entry(monkeypatch):
     entry = fake_db["audit_log"].docs[-1]
     assert entry["event_type"] == "ai.decision" and entry["subject"] == "C1"
     assert entry["data"]["ml_model_version"] == "v7" and len(entry["signature"]) == 64
+
+
+async def test_score_claim_rejects_data_outside_the_contract_before_calling_ml(monkeypatch):
+    def must_not_call():
+        raise AssertionError("ml-service must not be called with invalid data")
+
+    monkeypatch.setattr(graph, "get_ml_service", must_not_call)
+    claim = {"billed_amount": 100.0, "treatment_type": "x" * 41, "procedure_code": "CPT1", "provider_id": "P1"}
+    with pytest.raises(graph.InvalidClaimDataError) as exc:
+        await graph.score_claim(claim, {"age": 40}, {"avg_claim_amount": 100.0})
+    assert exc.value.fields == ["treatment_type"]

@@ -51,3 +51,15 @@ def test_create_analysis_runs_agent(monkeypatch):
 
 def test_get_analysis(monkeypatch):
     assert client(monkeypatch).get("/v1/analyses/C1").status_code == 404
+
+
+def test_create_analysis_422_when_claim_data_cannot_be_scored(monkeypatch):
+    from agent.graph import InvalidClaimDataError
+
+    async def bad_claim(claim_id, bypass_cache=False):
+        raise InvalidClaimDataError(["treatment_type"])
+
+    monkeypatch.setattr(analyses, "analyze_claim", bad_claim)
+    r = client(monkeypatch, claim={"claim_id": "C1"}).post("/v1/analyses", json={"claim_id": "C1"})
+    assert r.status_code == 422
+    assert "treatment_type" in r.json()["detail"]
