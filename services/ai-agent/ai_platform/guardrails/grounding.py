@@ -40,16 +40,16 @@ def check_grounding(
     text: str, claim: dict[str, Any], signals: dict[str, Any], provider: dict | None = None
 ) -> GroundingReport:
     sources = {**(provider or {}), **claim, **signals}
-    money = [float(sources[k]) for k in MONEY_FIELDS if isinstance(sources.get(k), (int, float))]
+    money = [float(sources[k]) for k in MONEY_FIELDS if isinstance(sources.get(k), int | float)]
 
     probabilities = [float(v) * 100 for v in (signals.get("risk_probabilities") or {}).values()]
     probabilities += [100 - p for p in probabilities]  # "5% high risk" vs "95% not high"
-    if isinstance(signals.get("anomaly_recent_score"), (int, float)):
+    if isinstance(signals.get("anomaly_recent_score"), int | float):
         probabilities.append(float(signals["anomaly_recent_score"]) * 100)
 
     ratios = []
     billed, predicted = claim.get("billed_amount"), signals.get("predicted_paid_amount")
-    if isinstance(billed, (int, float)) and isinstance(predicted, (int, float)) and predicted > 0:
+    if isinstance(billed, int | float) and isinstance(predicted, int | float) and predicted > 0:
         ratios += [billed / predicted, predicted / billed]
     percentages = probabilities + [r * 100 for r in ratios] + [abs(r - 1) * 100 for r in ratios]
 
