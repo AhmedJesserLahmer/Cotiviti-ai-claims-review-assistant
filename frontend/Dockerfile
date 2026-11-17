@@ -19,9 +19,18 @@ RUN npm run build
 # ---- runner ----
 FROM node:22-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+# Run as the image's unprivileged "node" user. The numeric UID lets Kubernetes
+# verify runAsNonRoot. Only .next/cache must be writable (an emptyDir in the chart).
+COPY --from=builder --chown=1000:1000 /app/public ./public
+COPY --from=builder --chown=1000:1000 /app/.next/standalone ./
+COPY --from=builder --chown=1000:1000 /app/.next/static ./.next/static
+RUN mkdir -p .next/cache && chown 1000:1000 .next/cache
+USER 1000:1000
 EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
 CMD ["node", "server.js"]
