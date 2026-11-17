@@ -10,7 +10,7 @@ def test_defaults_without_key_disable_llm(monkeypatch):
     _clean_env(monkeypatch)
     settings = AISettings(_env_file=None)
     assert not settings.llm_enabled
-    assert settings.model_chain[0] == "llama-3.3-70b-versatile"
+    assert settings.model_chain == ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
 
 
 def test_placeholder_key_is_not_a_credential(monkeypatch):
