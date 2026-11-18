@@ -1,0 +1,49 @@
+{{- if and .Values.seedJob.enabled .Values.mlService.enabled }}
+{{- $component := "seed" }}
+# Loads the synthetic dataset after install/upgrade. Idempotent: it replaces the
+# synthetic collections, so it is disabled for environments with real data.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "claims-review.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "claims-review.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: seed
+          image: {{ include "claims-review.image" (dict "root" . "values" .Values.mlService) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["python", "-m", "data_gen.seed_mongo"]
+          env:
+            - name: MONGO_URI
+              value: {{ include "claims-review.mongoUri" . | quote }}
+            - name: MONGO_DB_NAME
+              value: {{ .Values.mongodb.dbName | quote }}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            {{- include "claims-review.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
