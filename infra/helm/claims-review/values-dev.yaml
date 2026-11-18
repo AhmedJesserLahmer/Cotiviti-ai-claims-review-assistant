@@ -1,0 +1,34 @@
+# Development / local kind cluster: one replica each, in-chart data stores,
+# chart-managed secrets, no ingress (port-forward), small resources.
+global:
+  environment: dev
+  imageRegistry: ""        # images loaded into kind with `kind load docker-image`
+  imageTag: dev
+  imagePullPolicy: Never
+
+claimsApi:
+  replicas: 1
+  env:
+    CORS_ORIGINS: "http://localhost:3000"
+  autoscaling: {enabled: false}
+  pdb: {enabled: false}
+aiAgent:
+  replicas: 1
+  autoscaling: {enabled: false}
+  pdb: {enabled: false}
+mlService:
+  replicas: 1
+  autoscaling: {enabled: false}
+  pdb: {enabled: false}
+  models:
+    persistence:
+      accessModes: [ReadWriteOnce]   # kind's local-path provisioner
+frontend:
+  replicas: 1
+  pdb: {enabled: false}
+
+mongodb: {storage: 1Gi}
+redis: {storage: 256Mi}
+
+networkPolicy:
+  enabled: false   # kind's default CNI does not enforce NetworkPolicies
