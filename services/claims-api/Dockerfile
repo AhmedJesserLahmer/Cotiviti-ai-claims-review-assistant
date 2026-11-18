@@ -12,7 +12,7 @@ WORKDIR /app
 # shared library can be installed. Dependencies first for layer caching.
 COPY libs/python/claims-common /opt/claims-common
 COPY services/claims-api/requirements.txt .
-RUN pip install -r requirements.txt /opt/claims-common
+RUN pip install -r requirements.txt "/opt/claims-common[otel,redis]"
 
 COPY services/claims-api/ .
 

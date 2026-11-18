@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from claims_common.health import ReadinessCheck, build_health_router
 from claims_common.logging import RequestContextMiddleware, configure_logging
 from claims_common.settings import ServiceSettings
+from claims_common.tracing import setup_tracing
 
 
 def create_app(
@@ -47,4 +48,5 @@ def create_app(
     app.add_middleware(RequestContextMiddleware)
     app.include_router(build_health_router(readiness_checks, info=health_info))
     app.state.settings = settings
+    app.state.tracing = setup_tracing(app, settings.service_name)
     return app

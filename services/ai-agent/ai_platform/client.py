@@ -24,6 +24,7 @@ from ai_platform.providers.base import ChatMessage, LLMProvider, LLMResponse
 from ai_platform.resilience.circuit_breaker import CircuitBreaker
 from ai_platform.resilience.retry import RetryPolicy, SleepFn, retry_async
 from ai_platform.resilience.timeout import with_timeout
+from claims_common.tracing import span
 
 
 class AttemptRecorder(Protocol):
@@ -145,12 +146,18 @@ class ResilientLLMClient:
             attempt_no += 1
             started = time.perf_counter()
             try:
-                response = await with_timeout(
-                    provider.generate(messages, temperature=temperature, max_tokens=max_tokens),
-                    self.timeout_s,
-                    provider=provider.name,
-                    model=provider.model,
-                )
+                with span(
+                    "llm.generate", **{"llm.provider": provider.name, "llm.model": provider.model, "llm.attempt": attempt_no}
+                ) as current:
+                    response = await with_timeout(
+                        provider.generate(messages, temperature=temperature, max_tokens=max_tokens),
+                        self.timeout_s,
+                        provider=provider.name,
+                        model=provider.model,
+                    )
+                    if current is not None:
+                        current.set_attribute("llm.prompt_tokens", response.usage.prompt_tokens)
+                        current.set_attribute("llm.completion_tokens", response.usage.completion_tokens)
             except asyncio.CancelledError:
                 # Lost a hedge race: not a provider failure, do not record or trip the breaker.
                 raise

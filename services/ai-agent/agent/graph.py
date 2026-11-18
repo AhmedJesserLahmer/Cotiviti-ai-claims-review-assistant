@@ -19,6 +19,7 @@ from agent.state import AgentState
 from ai_platform.audit import AIRunMetadata
 from ai_platform.guardrails.base import GuardrailFinding
 from claims_common.http import ServiceUnavailableError
+from claims_common.tracing import set_span_attributes, span
 from ai_platform.service import get_claim_review_ai
 from db.mongo import db
 from claims_common.contracts import ScoreRequest, ScoreResponse
@@ -233,7 +234,14 @@ def _result(state: dict) -> dict:
 async def analyze_claim(claim_id: str, *, bypass_cache: bool = False) -> dict:
     graph = get_graph()
     run = AIRunMetadata(cache_bypassed=bypass_cache)
-    result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": run})
+    with span("claim.analyze", **{"claim.id": claim_id, "ai.run_id": run.run_id}):
+        result = await graph.ainvoke({"claim_id": claim_id, "loops": 0, "ai_run": run})
+        set_span_attributes(**{
+            "ai.recommendation": result["recommendation"],
+            "ai.decision_source": run.decision_source,
+            "ai.policy_override": run.recommendation_overridden,
+            "ai.degraded": run.degraded,
+        })
     return _result(result)
 
 
