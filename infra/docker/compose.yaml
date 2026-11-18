@@ -158,6 +158,22 @@ services:
       - "9090:9090"
     mem_limit: 256m
 
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: claims_poc_grafana
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    mem_limit: 256m
+
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
     container_name: claims_poc_jaeger
