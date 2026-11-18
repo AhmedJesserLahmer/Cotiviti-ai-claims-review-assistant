@@ -1,0 +1,16 @@
+# Single-node kind cluster for local Kubernetes testing of the Helm chart.
+#   kind create cluster --config infra/k8s/kind/cluster.yaml
+# One node keeps memory use low; the dev values run one replica per component.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: claims-review
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        # Evict pods before the laptop itself runs out of memory.
+        evictionHard:
+          memory.available: "500Mi"
+        systemReserved:
+          memory: "512Mi"
