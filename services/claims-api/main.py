@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 
+from fastapi import Depends
+
 from claims_common.app import create_app
 from core.clients import close_clients
 from core.config import settings
 from core.runners import close_runner
+from core.security import get_principal
 from routers import claims, feedback, health, jobs, providers, seed
 
 
@@ -23,8 +26,11 @@ app = create_app(
     lifespan=lifespan,
 )
 
-app.include_router(seed.router)
-app.include_router(claims.router)
-app.include_router(providers.router)
-app.include_router(jobs.router)
-app.include_router(feedback.router)
+# Every business route needs a valid bearer token when AUTH_ENABLED=true; probes and
+# /metrics stay open (they are protected at the network level).
+authenticated = [Depends(get_principal)]
+app.include_router(seed.router, dependencies=authenticated)
+app.include_router(claims.router, dependencies=authenticated)
+app.include_router(providers.router, dependencies=authenticated)
+app.include_router(jobs.router, dependencies=authenticated)
+app.include_router(feedback.router, dependencies=authenticated)
