@@ -1,0 +1,12 @@
+{
+  "name": "claims-review-e2e",
+  "private": true,
+  "description": "End-to-end tests against the running compose stack (AI in offline/rule-engine mode).",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test tests/api.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}
