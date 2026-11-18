@@ -5,7 +5,7 @@ pydantic==2.10.4
 pydantic-settings==2.7.1
 httpx==0.28.1
 prometheus-client==0.21.1
-redis==5.2.1
+redis==8.1.0
 langgraph==0.2.60
 langchain-groq==0.2.1
 langchain-core==0.3.28
