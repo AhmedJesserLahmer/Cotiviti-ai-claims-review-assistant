@@ -11,5 +11,6 @@
 **/.venv
 **/.env
 services/*/data
-services/*/ml/models/*.joblib
+# Local model registry (versions + CURRENT); the image trains its own model.
+services/*/ml/models/*
 services/*/tests
