@@ -1,0 +1,105 @@
+{{- /* Single-node MongoDB and Redis for dev/staging. Production uses managed services. */ -}}
+{{- range $store := list "mongodb" "redis" }}
+{{- $v := index $.Values $store }}
+{{- if $v.enabled }}
+{{- $name := include "claims-review.componentName" (dict "root" $ "component" $store) }}
+{{- $port := ternary 27017 6379 (eq $store "mongodb") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" $ "component" $store) | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "claims-review.selectorLabels" (dict "root" $ "component" $store) | nindent 4 }}
+  ports:
+    - name: tcp
+      port: {{ $port }}
+      targetPort: {{ $port }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" $ "component" $store) | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "claims-review.selectorLabels" (dict "root" $ "component" $store) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "claims-review.selectorLabels" (dict "root" $ "component" $store) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $store }}
+          image: {{ $v.image }}
+          {{- if eq $store "redis" }}
+          args: ["--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction", "--dir", "/data"]
+          {{- else }}
+          args: ["--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+          {{- end }}
+          ports:
+            - name: tcp
+              containerPort: {{ $port }}
+          readinessProbe:
+            exec:
+              {{- if eq $store "redis" }}
+              command: ["redis-cli", "ping"]
+              {{- else }}
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+              {{- end }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: tcp
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            {{- include "claims-review.containerSecurityContext" $ | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ ternary "/data/db" "/data" (eq $store "mongodb") }}
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq $store "mongodb" }}
+            - name: configdb
+              mountPath: /data/configdb
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if eq $store "mongodb" }}
+        - name: configdb
+          emptyDir: {}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $v.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $v.storage }}
+{{- end }}
+{{- end }}
