@@ -155,7 +155,9 @@ services:
     profiles: ["observability"]
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=3d"]
     volumes:
-      - ../observability/prometheus:/etc/prometheus:ro
+      - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Alert rules are shared with the Helm chart's PrometheusRule (single source).
+      - ../helm/claims-review/files/prometheus:/etc/prometheus/rules:ro
     ports:
       - "9090:9090"
     mem_limit: 256m
@@ -169,7 +171,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     volumes:
       - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../helm/claims-review/files/grafana:/var/lib/grafana/dashboards:ro
     ports:
       - "3001:3000"
     depends_on:
