@@ -83,8 +83,8 @@ aiAgent:
   replicas: 2
   port: 8002
   env:
-    GROQ_MODEL: llama-3.3-70b-versatile
-    AI_FALLBACK_MODELS: llama-3.1-8b-instant
+    GROQ_MODEL: openai/gpt-oss-120b
+    AI_FALLBACK_MODELS: "qwen/qwen3.8-27b,openai/gpt-oss-20b"
     AI_REQUEST_TIMEOUT_S: "20"
     AI_MAX_RETRIES: "2"
     AI_HEDGE_AFTER_S: "0"

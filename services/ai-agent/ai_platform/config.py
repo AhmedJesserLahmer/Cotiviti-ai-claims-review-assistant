@@ -23,11 +23,11 @@ class AISettings(BaseSettings):
     # --- providers -------------------------------------------------------------
     groq_api_key: str = Field(default="", validation_alias=AliasChoices("GROQ_API_KEY", "AI_GROQ_API_KEY"))
     primary_model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="openai/gpt-oss-120b",
         validation_alias=AliasChoices("GROQ_MODEL", "AI_PRIMARY_MODEL"),
     )
     # Comma-separated list, tried in order after the primary model fails.
-    fallback_models: str = "llama-3.1-8b-instant"
+    fallback_models: str = "qwen/qwen3.8-27b,openai/gpt-oss-20b"
     # Optional cross-vendor fallback: any OpenAI-compatible endpoint, tried after the
     # Groq chain. Disabled unless base URL and model are set.
     openai_base_url: str = ""

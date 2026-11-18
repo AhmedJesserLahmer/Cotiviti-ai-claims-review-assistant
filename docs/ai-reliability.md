@@ -87,8 +87,8 @@ logged as one structured JSON line (`claims_api.agent` logger).
 | Variable | Default | Meaning |
 |---|---|---|
 | `GROQ_API_KEY` | – | Groq credentials; without it the rule engine is used |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Primary model |
-| `AI_FALLBACK_MODELS` | `llama-3.1-8b-instant` | Comma-separated fallback chain |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Primary model |
+| `AI_FALLBACK_MODELS` | `qwen/qwen3.8-27b,openai/gpt-oss-20b` | Comma-separated fallback chain (a different model family first, so one family's outage or retirement does not take out the whole chain) |
 | `AI_OFFLINE_MODE` | `false` | Force the rule engine (demos, CI, outage drills) |
 | `AI_REQUEST_TIMEOUT_S` | `20` | Hard deadline per call |
 | `AI_MAX_RETRIES` | `2` | Retries per model (attempts = retries + 1) |

@@ -2,14 +2,16 @@
 
 Defaults are list prices at the time of writing and only drive *estimates* in the audit
 trail and metrics; override them with ``AI_MODEL_PRICES`` without a code change, e.g.
-``AI_MODEL_PRICES="llama-3.3-70b-versatile=0.59/0.79;my-model=1.0/2.0"``.
+``AI_MODEL_PRICES="openai/gpt-oss-120b=0.15/0.60;my-model=1.0/2.0"``.
+Models missing from the table are estimated at $0; add them through that variable.
 """
 
 from __future__ import annotations
 
 DEFAULT_PRICES: dict[str, tuple[float, float]] = {
-    "llama-3.3-70b-versatile": (0.59, 0.79),
-    "llama-3.1-8b-instant": (0.05, 0.08),
+    # Groq list prices last checked in 2025; verify before relying on cost figures.
+    "openai/gpt-oss-120b": (0.15, 0.60),
+    "openai/gpt-oss-20b": (0.075, 0.30),
 }
 
 
