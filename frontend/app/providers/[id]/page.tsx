@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users, Wallet, FileStack, XCircle, Radar } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatUSDWhole } from "@/lib/format";
 import AnomalyChart from "@/components/AnomalyChart";
 
 export default async function ProviderDetailPage({
@@ -20,7 +21,7 @@ export default async function ProviderDetailPage({
 
   const stats = [
     { label: "Cluster", value: provider.cluster_label, Icon: Users, color: "bg-cotiviti-violet" },
-    { label: "Avg Billed", value: `$${provider.avg_billed.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, Icon: Wallet, color: "bg-cotiviti-teal" },
+    { label: "Avg Billed", value: formatUSDWhole(provider.avg_billed), Icon: Wallet, color: "bg-cotiviti-teal" },
     { label: "Claim Volume", value: `${provider.claim_volume}`, Icon: FileStack, color: "bg-cotiviti-gold" },
     { label: "Denial Rate", value: `${(provider.denial_rate * 100).toFixed(1)}%`, Icon: XCircle, color: "bg-cotiviti-magenta" },
   ];
