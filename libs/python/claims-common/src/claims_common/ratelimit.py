@@ -118,6 +118,10 @@ def rate_limit_dependency(
             return
         decision = await limiter_factory().hit(f"{name}:{identity(request)}", limit)
         if not decision.allowed:
+            from claims_common.metrics import RATE_LIMITED
+
+            settings = getattr(request.app.state, "settings", None)
+            RATE_LIMITED.labels(getattr(settings, "service_name", "unknown"), name).inc()
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded for {name}: {limit.per_minute} requests/minute",
