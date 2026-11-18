@@ -1,0 +1,49 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "41 4 * * 1"   # weekly, catches new CVEs in unchanged dependencies
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pip-audit:
+    name: pip-audit (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [services/claims-api, services/ai-agent, services/ml-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit==2.7.3
+      - name: Audit pinned requirements
+        run: pip-audit --requirement ${{ matrix.package }}/requirements.txt --strict --progress-spinner off
+
+  npm-audit:
+    name: npm audit (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Production dependencies only; high and critical advisories fail the job.
+      - run: npm audit --omit=dev --audit-level=high
