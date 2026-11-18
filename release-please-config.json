@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": true,
+  "separate-pull-requests": false,
+  "group-pull-request-title-pattern": "chore: release ${branch}",
+  "changelog-sections": [
+    {"type": "feat", "section": "Features"},
+    {"type": "fix", "section": "Bug Fixes"},
+    {"type": "perf", "section": "Performance"},
+    {"type": "refactor", "section": "Refactoring"},
+    {"type": "docs", "section": "Documentation", "hidden": false},
+    {"type": "ci", "section": "CI/CD", "hidden": true},
+    {"type": "test", "section": "Tests", "hidden": true}
+  ],
+  "packages": {
+    "services/claims-api": {"component": "claims-api", "release-type": "python"},
+    "services/ai-agent": {"component": "ai-agent", "release-type": "python"},
+    "services/ml-service": {"component": "ml-service", "release-type": "python"},
+    "frontend": {"component": "frontend", "release-type": "node"},
+    "libs/python/claims-common": {"component": "claims-common", "release-type": "python"},
+    "infra/helm/claims-review": {"component": "chart", "release-type": "helm"}
+  }
+}
