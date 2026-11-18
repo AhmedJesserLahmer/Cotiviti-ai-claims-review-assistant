@@ -113,27 +113,44 @@ A claims reviewer opens a claim and clicks **Run AI Analysis**. Under the hood:
 
 ### 🎬 The human flow, visually
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
-flowchart LR
-    A([Reviewer opens a claim<br/>or uploads a CSV]):::terminal
-    B["<b>Score the claim</b><br/>risk class · expected payment"]:::step
-    C["<b>Add provider context</b><br/>behaviour cluster · billing anomalies"]:::step
-    D["<b>Reason step by step</b><br/>LLM over all four signals"]:::ai
-    E{"Recommend"}:::decision
-    F[("Stored with<br/>audit trail")]:::store
-    G(["Reviewer agrees<br/>or overrides"]):::terminal
-
-    A --> B --> C --> D --> E
-    E -- "needs more data" --> C
-    E -- "approve · flag for review" --> F --> G
-
-    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
-    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
-    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
-    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
+```text
+  +----------------------------------------+
+  | Reviewer opens a claim                 |
+  | (or uploads a CSV)                     |
+  +----------------------------------------+
+                       |
+                       v
+  +----------------------------------------+
+  | Score the claim                        |
+  | risk class . expected payment          |
+  +----------------------------------------+
+                       |
+                       v
+  +----------------------------------------+
+  | Add provider context                   |<-----+
+  | behaviour cluster . billing anomalies  |      |
+  +----------------------------------------+      |
+                       |                          |
+                       v                          |
+  +----------------------------------------+      |
+  | Reason step by step (LLM)              |      |
+  | over all four signals                  |      |
+  +----------------------------------------+      |
+                       |                          |
+                       v                          |
+  +----------------------------------------+      |
+  | Recommend an action                    |------+
+  +----------------------------------------+  needs more data
+                       | approve / flag for review
+                       v
+  +----------------------------------------+
+  | Store the result + audit trail         |
+  +----------------------------------------+
+                       |
+                       v
+  +----------------------------------------+
+  | Reviewer agrees or overrides           |
+  +----------------------------------------+
 ```
 
 ---
@@ -144,44 +161,57 @@ The POC grew into a production-grade monorepo: three Python services on a shared
 library, a Next.js dashboard, and infrastructure for Docker Compose, Kubernetes (Helm,
 Argo CD) and AWS (Terraform).
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
-flowchart TB
-    U(["Reviewer"]):::terminal
-    FE["<b>frontend</b><br/>Next.js dashboard · :3000"]:::step
-    API["<b>claims-api</b> · :8000<br/>gateway · auth · rate limits<br/>uploads · jobs · feedback"]:::step
-
-    subgraph CORE["Analysis services"]
-        W["<b>claims-worker</b><br/>async bulk analysis"]:::step
-        AG["<b>ai-agent</b> · :8002<br/>LangGraph agent<br/>AI reliability layer"]:::ai
-        ML["<b>ml-service</b> · :8001<br/>model registry · scoring<br/>out-of-distribution guard"]:::step
-    end
-
-    Q[("Redis<br/>jobs · cache · limits")]:::store
-    DB[("MongoDB<br/>claims · analyses · audit")]:::store
-
-    LLM["<b>LLM providers</b><br/>Groq model chain<br/>OpenAI-compatible fallback"]:::external
-    OBS["<b>Observability</b><br/>Prometheus · Grafana · Jaeger"]:::external
-
-    U --> FE
-    FE -- "REST · SSE · JWT" --> API
-    API -- "enqueue" --> Q
-    Q --> W
-    API -- "internal token" --> AG
-    W --> AG
-    AG -- "/v1/score" --> ML
-    AG -- "retries · fallbacks<br/>circuit breakers" --> LLM
-    AG --> DB
-    ML --> DB
-    API --> DB
-    API -. "traces · metrics<br/>(every service)" .-> OBS
-
-    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
-    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
-    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
-    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
+```text
+                        +------------------------------+
+                        |           Reviewer           |
+                        +------------------------------+
+                                        |
+                                        v
+                        +------------------------------+
+                        | frontend               :3000 |
+                        | Next.js dashboard            |
+                        +------------------------------+
+                                        | REST . SSE . JWT
+                                        |
+traces . metrics (all services)         v
++- - - - - - - - - +    +------------------------------+            +--------------------------+
+: Observability    :    | claims-api             :8000 | enqueue    | Redis                    |
+: Prometheus       :<---| gateway . auth . rate limits |----------->| jobs . cache . limits    |
+: Grafana . Jaeger :    | uploads . jobs . feedback    |            +--------------------------+
++- - - - - - - - - +    +------------------------------+                          |
+                                        |                                         |
+                                        | internal token                          |
+                                        |                                         v
+                                        |                           +--------------------------+
+                                        |                           | claims-worker            |
+                                        |                           | async bulk analysis      |
+                                        |                           +--------------------------+
+                                        |                                         |
+                                        |                                         |
+                                        v                                         |
+                        +------------------------------+                          |
+                        | ai-agent               :8002 |                          |
+                        | LangGraph agent              |<-------------------------+
+                        | AI reliability layer         |
+                        +------------------------------+
+                              |                  |
+                   +----------+                  +-------------+
+                   | /v1/score                                 | retries . fallbacks . breakers
+                   v                                           v
+    +----------------------------+            +- - - - - - - - - - - - - - - - +
+    | ml-service        :8001    |            : LLM providers                  :
+    | model registry . scoring   |            : Groq model chain               :
+    | out-of-distribution guard  |            : OpenAI-compatible fallback     :
+    +----------------------------+            +- - - - - - - - - - - - - - - - +
+                   |
+                   |
+                   |
+                   |
+                   |    +------------------------------+
+                   +--->| MongoDB                      |
+                        | claims . analyses . audit    |
+                        +------------------------------+
+                        (claims-api and ai-agent also read/write MongoDB)
 ```
 
 | Service | Owns | Docs |
@@ -202,27 +232,47 @@ The agent is a `StateGraph` (`services/ai-agent/agent/graph.py`) with a shared t
 (`services/ai-agent/agent/state.py`). Nodes run in sequence; the recommendation node can loop back
 **once** to fetch a wider data window before deciding — this is the *agentic* behavior.
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
-flowchart TD
-    S([START]):::terminal
-    A["<b>fetch_claim_context</b><br/>claim, patient, provider and a<br/>30-day billing window from MongoDB"]:::step
-    B["<b>run_ml_signals</b><br/>classification · prediction<br/>clustering · anomaly lookup"]:::step
-    C["<b>reasoning_node</b><br/>chain reasoning over the signals"]:::ai
-    D(["<b>recommendation_node</b><br/>decide the action"]):::decision
-    E["<b>persist_result</b><br/>upsert into claim_analyses"]:::step
-    X([END]):::terminal
-
-    S --> A --> B --> C --> D
-    D -- "request_more_data<br/>(90-day window, once)" --> A
-    D -- "approve · flag_for_review" --> E --> X
-
-    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
-    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
-    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
-    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
+```text
+  +------------------------------------------+
+  |                  START                   |
+  +------------------------------------------+
+                        |
+                        v
+  +------------------------------------------+
+  | fetch_claim_context                      |<-----+
+  | claim, patient, provider + a 30-day      |      |
+  | billing window from MongoDB              |      |
+  +------------------------------------------+      |
+                        |                           |
+                        v                           |
+  +------------------------------------------+      |
+  | run_ml_signals                           |      |
+  | classification . prediction              |      |
+  | clustering . anomaly lookup              |      |
+  +------------------------------------------+      |
+                        |                           |
+                        v                           |
+  +------------------------------------------+      |
+  | reasoning_node                           |      |
+  | chain reasoning over the signals (LLM)   |      |
+  +------------------------------------------+      |
+                        |                           |
+                        v                           |
+  +------------------------------------------+      |
+  | recommendation_node                      |------+
+  | decide the action (LLM)                  |  request_more_data
+  +------------------------------------------+  (90-day window, at most once)
+                        | approve / flag_for_review
+                        v
+  +------------------------------------------+
+  | persist_result                           |
+  | upsert into claim_analyses               |
+  +------------------------------------------+
+                        |
+                        v
+  +------------------------------------------+
+  |                   END                    |
+  +------------------------------------------+
 ```
 
 | Node | File / function | Responsibility | Capability |
@@ -332,25 +382,35 @@ region — only whichever numeric columns you feed it.**
 
 ### The algorithm, step by step
 
-```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
-flowchart TD
-    S["<b>Initialise</b><br/>place k = 4 random centroids"]:::step
-    A["<b>Assign</b><br/>each provider to its nearest centroid"]:::step
-    M["<b>Update</b><br/>move each centroid to the mean<br/>of its assigned providers"]:::step
-    C{"Changed?"}:::decision
-    R(["<b>Converged</b><br/>best of 10 random starts kept"]):::terminal
-
-    S --> A --> M --> C
-    C -- "yes, reassign" --> A
-    C -- "no" --> R
-
-    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
-    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
-    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
-    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
-    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
+```text
+  +------------------------------------------+
+  | 1. Initialise                            |
+  | place k = 4 random centroids             |
+  +------------------------------------------+
+                        |
+                        v
+  +------------------------------------------+
+  | 2. Assign                                |<-----+
+  | each provider to its nearest centroid    |      |
+  +------------------------------------------+      |
+                        |                           |
+                        v                           |
+  +------------------------------------------+      |
+  | 3. Update                                |      |
+  | move each centroid to the mean           |      |
+  | of its assigned providers                |      |
+  +------------------------------------------+      |
+                        |                           |
+                        v                           |
+  +------------------------------------------+      |
+  | 4. Did any provider change cluster?      |------+
+  +------------------------------------------+  yes: repeat
+                        | no
+                        v
+  +------------------------------------------+
+  | Converged                                |
+  | keep the best of 10 random starts        |
+  +------------------------------------------+
 ```
 
 1. **Pick centroids** — `k` (here, 4) random points are dropped into the same 4-D space
