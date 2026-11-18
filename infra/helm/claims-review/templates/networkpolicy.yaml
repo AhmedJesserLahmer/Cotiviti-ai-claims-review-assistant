@@ -1,0 +1,181 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- /*
+Traffic matrix (everything else is denied):
+  ingress-nginx  -> frontend:3000, claims-api:8000
+  frontend       -> claims-api:8000
+  claims-api     -> ai-agent:8002, ml-service:8001, mongodb, redis
+  worker         -> ai-agent:8002, mongodb, redis
+  ai-agent       -> ml-service:8001, mongodb, redis, internet:443 (LLM APIs only)
+  ml-service     -> mongodb
+  seed/training  -> mongodb, ml-service
+  monitoring     -> every app pod's /metrics; app pods -> OTLP collector
+*/ -}}
+{{- $sel := dict
+  "frontend" (dict "frontend" 3000)
+  "claims-api" (dict "claims-api" 8000)
+  "ai-agent" (dict "ai-agent" 8002)
+  "ml-service" (dict "ml-service" 8001)
+}}
+{{- $peers := dict
+  "claims-api" (list "frontend")
+  "ai-agent" (list "claims-api" "worker")
+  "ml-service" (list "claims-api" "ai-agent" "seed" "training")
+  "mongodb" (list "claims-api" "ai-agent" "ml-service" "worker" "seed" "training")
+  "redis" (list "claims-api" "ai-agent" "worker")
+}}
+{{- $ports := dict "claims-api" 8000 "ai-agent" 8002 "ml-service" 8001 "mongodb" 27017 "redis" 6379 "frontend" 3000 }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claims-review.fullname" . }}-default-deny
+  labels:
+    {{- include "claims-review.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+  egress:
+    # DNS for every pod of the release.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+{{- range $target, $sources := $peers }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" $ "component" $target) }}-ingress
+  labels:
+    {{- include "claims-review.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claims-review.selectorLabels" (dict "root" $ "component" $target) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range $sources }}
+        - podSelector:
+            matchLabels:
+              {{- include "claims-review.selectorLabels" (dict "root" $ "component" .) | nindent 14 }}
+        {{- end }}
+        {{- if eq $target "claims-api" }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $np.ingressNamespaceSelector | nindent 14 }}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: {{ index $ports $target }}}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" . "component" "frontend") }}-ingress
+  labels:
+    {{- include "claims-review.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claims-review.selectorLabels" (dict "root" . "component" "frontend") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $np.ingressNamespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 3000}
+---
+# Prometheus may scrape /metrics on the app components.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claims-review.fullname" . }}-allow-metrics
+  labels:
+    {{- include "claims-review.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [claims-api, ai-agent, ml-service]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $np.monitoringNamespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 8000}
+        - {protocol: TCP, port: 8001}
+        - {protocol: TCP, port: 8002}
+{{- $egress := dict
+  "frontend" (list "claims-api")
+  "claims-api" (list "ai-agent" "ml-service" "mongodb" "redis")
+  "worker" (list "ai-agent" "mongodb" "redis")
+  "ai-agent" (list "ml-service" "mongodb" "redis")
+  "ml-service" (list "mongodb")
+  "seed" (list "mongodb" "ml-service")
+  "training" (list "mongodb")
+}}
+{{- range $source, $targets := $egress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" $ "component" $source) }}-egress
+  labels:
+    {{- include "claims-review.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claims-review.selectorLabels" (dict "root" $ "component" $source) | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    {{- range $targets }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "claims-review.selectorLabels" (dict "root" $ "component" .) | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ index $ports . }}}
+    {{- end }}
+    {{- if or (not $.Values.mongodb.enabled) (not $.Values.redis.enabled) }}
+    # Managed MongoDB / Redis outside the cluster.
+    - ports:
+        - {protocol: TCP, port: 27017}
+        - {protocol: TCP, port: 6379}
+        - {protocol: TCP, port: 6380}
+    {{- end }}
+    {{- if $.Values.observability.otlpEndpoint }}
+    # OTLP traces to the collector in the monitoring namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $np.monitoringNamespaceSelector | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+    {{- end }}
+    {{- if eq $source "ai-agent" }}
+    # LLM provider APIs: HTTPS to public addresses only (no lateral movement).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+{{- end }}
+{{- end }}
