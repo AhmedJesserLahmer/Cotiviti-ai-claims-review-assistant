@@ -17,7 +17,7 @@
 ![ML models](https://img.shields.io/badge/ML%20models-4-4C6EF5?style=flat-square)
 ![Agent nodes](https://img.shields.io/badge/LangGraph%20nodes-5-12B886?style=flat-square)
 ![Capabilities](https://img.shields.io/badge/AI%20capabilities-6-F59F00?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-13%20passing-2ea44f?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-300%2B%20passing-2ea44f?style=flat-square)
 
 </div>
 
@@ -129,57 +129,43 @@ flowchart LR
 
 ## 3. 🏗️ Project Architecture
 
+The POC grew into a production-grade monorepo: three Python services on a shared
+library, a Next.js dashboard, and infrastructure for Docker Compose, Kubernetes (Helm,
+Argo CD) and AWS (Terraform).
+
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "14px"}}}%%
 flowchart LR
-    U["🧑‍⚕️ Claims Reviewer"]
-
-    subgraph FE["Next.js Frontend  (port 3000)"]
-      DASH["Dashboard / Claim Detail / Provider pages"]
-      CH["Anomaly Chart (recharts)"]
-    end
-
-    subgraph BE["FastAPI Backend  (port 8000)"]
-      API["REST API<br/>routers: claims, providers, seed"]
-      ML["ML Layer<br/>scikit-learn (joblib)"]
-      AG["LangGraph Agent"]
-    end
-
-    GROQ[["Groq LLM<br/>llama-3.3-70b"]]
-    DB[("MongoDB<br/>port 27017")]
-
-    U --> DASH
-    DASH -->|"HTTP (browser: localhost:8000)"| API
-    DASH -.->|"SSR (internal: backend:8000)"| API
-    API --> ML
-    API --> AG
-    AG --> ML
-    AG --> GROQ
-    API <--> DB
+    U["🧑‍⚕️ Reviewer"] --> FE["frontend<br/>Next.js :3000"]
+    FE -->|"REST + SSE<br/>JWT"| API["claims-api :8000<br/>gateway · auth · rate limits<br/>uploads · jobs · feedback"]
+    API -->|"X-Internal-Token"| AG["ai-agent :8002<br/>LangGraph + AI reliability layer"]
+    API --> Q[("Redis<br/>jobs · cache · limits")]
+    Q --> W["claims-worker<br/>arq"]
+    W --> AG
+    AG -->|"/v1/score"| ML["ml-service :8001<br/>model registry · inference<br/>OOD guard · seeding"]
+    AG -->|"retries · fallbacks<br/>circuit breakers"| LLM[["Groq chain →<br/>OpenAI-compatible"]]
+    API --> DB[("MongoDB")]
     AG --> DB
-    CH --> DASH
-
-    style U fill:#ffd6ec,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style DASH fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style CH fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style API fill:#a8f5e6,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style ML fill:#a8f5e6,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style AG fill:#ffe8b3,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style GROQ fill:#ffb3a7,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style DB fill:#b3e0ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
+    ML --> DB
+    AG & API & ML -.->|"OTel traces · /metrics"| OBS["Prometheus · Grafana · Jaeger"]
 ```
 
-> [!NOTE]
-> **Why two arrows from the frontend to the API?** Browser-side calls (e.g. the Analyze
-> button) use the host URL `http://localhost:8000`; Next.js server-side rendering inside
-> Docker uses the internal service name `http://backend:8000`. See `frontend/lib/api.ts`.
+| Service | Owns | Docs |
+|---|---|---|
+| `services/claims-api` | Public API: claims, providers, CSV uploads (size/row caps, formula-injection guard), async analysis jobs, reviewer feedback, AI quality analytics, admin audit verification; JWT auth with roles; per-client rate limits | [routers/](services/claims-api/routers) |
+| `services/ai-agent` | LangGraph agent and `ai_platform`: guardrails, validation, fallbacks, caching, budgets, judge, grounding, calibration, prompt A/B, audit trail; SSE progress | [docs/ai-reliability.md](docs/ai-reliability.md) |
+| `services/ml-service` | Synthetic dataset, training, versioned model registry, scoring with out-of-distribution flags | [ml/registry.py](services/ml-service/ml/registry.py) |
+| `libs/python/claims-common` | App factory, JSON logging, request ids, health, metrics, tracing, resilience, HTTP client, auth, audit log, rate limiting, security headers, contracts | [README](libs/python/claims-common/README.md) |
+
+Plan and history: [docs/ROADMAP.md](docs/ROADMAP.md) · Decisions: [docs/adr/](docs/adr) ·
+Operations: [docs/runbooks/](docs/runbooks).
 
 ---
 
 ## 4. 🕸️ LangGraph Agent Architecture
 
-The agent is a `StateGraph` (`services/claims-api/agent/graph.py`) with a shared typed `AgentState`
-(`services/claims-api/agent/state.py`). Nodes run in sequence; the recommendation node can loop back
+The agent is a `StateGraph` (`services/ai-agent/agent/graph.py`) with a shared typed `AgentState`
+(`services/ai-agent/agent/state.py`). Nodes run in sequence; the recommendation node can loop back
 **once** to fetch a wider data window before deciding — this is the *agentic* behavior.
 
 ```mermaid
@@ -344,7 +330,7 @@ flowchart TD
 ### Where this lives in the code
 
 ```python
-# services/claims-api/ml/train_models.py:95-121  (train_clustering)
+# services/ml-service/ml/train_models.py:95-121  (train_clustering)
 feature_cols = ["avg_billed", "claim_volume", "denial_rate", "avg_length_of_stay"]
 scaler = StandardScaler()                    # put all 4 axes on comparable scale
 X_scaled = scaler.fit_transform(agg[feature_cols])
@@ -414,7 +400,7 @@ clinic than for a provider that already bills large amounts routinely.
 
 ## 7. 🧬 Data & ML Layer
 
-**Synthetic data** (`services/claims-api/data_gen/generate_data.py`, fixed seed — no real patient
+**Synthetic data** (`services/ml-service/data_gen/generate_data.py`, fixed seed — no real patient
 data is used anywhere):
 
 | Collection | ~Count | Key fields |
@@ -424,7 +410,7 @@ data is used anywhere):
 | `claims` | 1,500+ | billed/paid amount, treatment_type, length_of_stay, `risk_label` (grows via CSV upload) |
 | `provider_timeseries` | 5,400 | daily_claim_count, daily_paid_total, + `anomaly_score`/`is_anomaly` |
 
-**Models** (`services/claims-api/ml/train_models.py`, persisted with joblib, loaded once at startup
+**Models** (`services/ml-service/ml/train_models.py`, persisted with joblib, loaded once at startup
 in `ml/inference.py`):
 
 <table>
@@ -449,151 +435,95 @@ Docker image build) and writes the cluster/anomaly results back onto
 
 ## 8. 📁 Directory Structure
 
-<details>
-<summary><b>Click to expand the full folder tree</b></summary>
-
 ```
-Cotiviti-Intern-Topic2/
-├── docker-compose.yml            # mongo + backend + frontend
-├── README.md                     # this file
-├── .env.example                  # env var template (real .env files are gitignored)
-├── sample_claims_upload.csv      # example file for the bulk-upload feature
-│
-├── services/claims-api/                      # FastAPI + ML + LangGraph
-│   ├── Dockerfile / entrypoint.sh
-│   ├── main.py                   # app + CORS + routers
-│   ├── core/config.py            # settings (.env)
-│   ├── db/mongo.py               # motor async client
-│   ├── models/schemas.py         # Pydantic models
-│   ├── data_gen/                 # generate_data.py, seed_mongo.py
-│   ├── ml/                       # train_models.py, inference.py, models/*.joblib
-│   ├── agent/                    # graph.py (LangGraph), state.py
-│   ├── routers/                  # claims.py (incl. CSV upload), providers.py, seed.py
-│   └── tests/                    # test_data_gen.py, test_ml.py, test_api_smoke.py
-│
-└── frontend/                     # Next.js (App Router, TS, Tailwind v4)
-    ├── Dockerfile
-    ├── app/                      # page.tsx, claims/[id], providers/, providers/[id]
-    ├── components/                # SiteHeader, CotivitiLogo, ClaimTable, SignalsPanel,
-    │                              # ReasoningNarrative, AnomalyChart, ProviderSparkline,
-    │                              # RiskBadge, AppMockup, UploadClaimsButton/Modal, ...
-    └── lib/                      # api.ts (fetch wrapper), types.ts
+.
+├── services/
+│   ├── claims-api/          # public gateway (FastAPI)          → core/, routers/, tests/
+│   ├── ai-agent/            # LangGraph agent + ai_platform      → agent/, ai_platform/, evals/, routers/
+│   └── ml-service/          # data, training, registry, scoring → data_gen/, ml/, routers/
+├── libs/python/claims-common/   # shared library (pip-installable)
+├── frontend/                # Next.js reviewer dashboard
+├── infra/
+│   ├── docker/compose.yaml  # local stack (+ "observability" profile)
+│   ├── helm/claims-review/  # Helm chart, values-{dev,staging,prod}.yaml, alert rules, dashboard
+│   ├── k8s/                 # kind cluster, local deploy script, Argo CD apps
+│   ├── terraform/           # AWS platform module (VPC, EKS, EFS, ElastiCache, secrets)
+│   └── observability/       # Prometheus scrape config, Grafana provisioning
+├── e2e/                     # Playwright end-to-end tests
+├── tests/load/              # k6 load test
+├── docs/                    # roadmap, AI reliability, ADRs, runbooks
+└── .github/                 # CI, images, security, AI eval gate, release, e2e
 ```
-
-</details>
 
 ---
 
 ## 9. 🔌 API Endpoints
 
+Public (claims-api, `:8000`). With `AUTH_ENABLED=true` every route except probes and
+`/metrics` needs a bearer token; *admin* routes need the admin role.
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/health` | Liveness check |
-| `POST` | `/seed` | Reseed MongoDB from CSVs |
-| `GET` | `/claims` | List claims |
-| `GET` | `/claims/{id}` | Single claim |
-| `POST` | `/claims/upload` | **Bulk-upload one or many claims via CSV** (per-row validation, optional `auto_analyze`) |
-| `POST` | `/claims/{id}/analyze` | **Run the LangGraph agent** |
-| `GET` | `/claims/{id}/analysis` | Fetch stored analysis |
-| `GET` | `/providers` | List providers (with cluster) |
-| `GET` | `/providers/{id}/cluster` | Provider cluster detail |
-| `GET` | `/providers/{id}/timeseries` | Daily billing series + anomaly flags |
+| `GET` | `/health/live`, `/health/ready`, `/metrics` | Probes (readiness checks MongoDB) and Prometheus metrics |
+| `GET` | `/claims`, `/claims/{id}` | Claims |
+| `POST` | `/claims/upload` | CSV upload (5 MB / 5,000 rows, formula-injection guard); `auto_analyze`, `async_analysis` → 202 + job |
+| `POST` | `/claims/{id}/analyze` | AI analysis (`?refresh=true` bypasses the result cache), rate limited |
+| `GET` | `/claims/{id}/analyze/stream` | Same, as server-sent events (one event per agent stage) |
+| `GET` | `/claims/{id}/analysis` | Stored analysis with `ai_metadata` audit trail |
+| `POST` | `/claims/{id}/feedback` | Reviewer agrees / overrides |
+| `POST` / `GET` | `/jobs/analyses`, `/jobs/{id}` | Async bulk analysis (202 + Location) and progress |
+| `GET` | `/analytics/ai-quality` | Agreement, unsafe-approval, fallback and override rates; agreement per prompt version |
+| `GET` | `/providers`, `/providers/{id}/cluster`, `/providers/{id}/timeseries` | Providers |
+| `POST` | `/seed` *(admin)* | Re-seed the synthetic dataset |
+| `GET` | `/admin/audit/verify` *(admin)* | Verify audit-log signatures and sequence |
+
+Internal (require `X-Internal-Token` when `INTERNAL_TOKEN` is set):
+ai-agent `POST /v1/analyses`, `GET /v1/analyses/{id}[/stream]`, `GET /v1/ai/status`;
+ml-service `POST /v1/score|classify|predict-payment`, `GET /v1/models`,
+`POST /v1/models/{version}/activate`, `POST /v1/seed`.
 
 ---
 
 ## 10. 🚀 Run & Test
 
-### Run with Docker (recommended — one command)
-
-The entire app is dockerized: **MongoDB + FastAPI + Next.js**. The backend image bakes
-in the synthetic data and trained ML models and seeds MongoDB automatically on startup.
-
 ```bash
-docker compose up --build -d
-#   App  → http://localhost:3000
-#   Docs → http://localhost:8000/docs
-#   MongoDB → localhost:27017
+cp .env.example .env            # optional: GROQ_API_KEY (without it the rule engine decides)
+make build SERVICE=ml-service   # one image at a time (memory-safe), then ai-agent, claims-api, frontend
+make up                         # docker compose up -d
+docker compose --profile observability up -d   # + Prometheus :9090, Grafana :3001, Jaeger :16686
 ```
 
-> [!IMPORTANT]
-> For the **Run AI Analysis** button to work, put a real `GROQ_API_KEY` (free at
-> [console.groq.com](https://console.groq.com)) in a `.env` file at the repo root
-> (next to `docker-compose.yml`) — copy `.env.example` and fill it in. Changing `.env`
-> requires **recreating** the container (`docker compose up -d backend`), not just
-> `docker compose restart` — restart doesn't re-read `.env` for variable substitution.
+Dashboard http://localhost:3000 · API http://localhost:8000/docs.
 
-<details>
-<summary><b>Run locally without Docker</b></summary>
+| Check | Command |
+|---|---|
+| Unit tests (all packages) | `make test` |
+| AI evaluation gate | `make eval` (scripted adversarial + rule-engine modes, zero unsafe approvals) |
+| Lint | `make lint` |
+| Helm | `make helm-lint` |
+| Kubernetes locally | `make k8s-local` (kind, memory-checked) |
+| End-to-end | `cd e2e && npx playwright test` against a running stack with `AI_OFFLINE_MODE=true` |
+| Load | `k6 run tests/load/analysis.js` |
 
-```bash
-# 1. MongoDB only
-docker compose up -d mongo
-
-# 2. Backend
-cd backend
-python -m venv venv && venv\Scripts\activate     # Windows
-pip install -r requirements.txt
-copy ..\.env.example .env                        # then set GROQ_API_KEY
-
-python -m data_gen.generate_data   # generate synthetic providers/patients/claims/timeseries
-python -m ml.train_models          # train classifier, predictor, cluster & anomaly models
-python -m data_gen.seed_mongo      # load everything into MongoDB
-uvicorn main:app --reload --port 8000
-
-# 3. Frontend (separate terminal)
-cd frontend
-npm install
-copy .env.local.example .env.local
-npm run dev
-```
-
-</details>
-
-### Tests
-
-```bash
-cd backend
-pytest tests/test_data_gen.py tests/test_ml.py    # unit (no services needed)
-
-docker compose up --build -d                      # then, full suite incl. live API:
-API_BASE_URL=http://localhost:8000 pytest
-```
-
-- `tests/test_data_gen.py` — synthetic data shape, referential integrity, risk labels
-- `tests/test_ml.py` — classification/prediction outputs, all 4 models load correctly
-- `tests/test_api_smoke.py` — live API: health, claims, provider cluster/timeseries,
-  analyze, **CSV upload** (valid + invalid rows, missing columns)
-
-### Try it end-to-end
-
-- Dashboard (`/`) → click a claim → **Run AI Analysis** → see all 4 ML signals +
-  the agent's chain-of-thought reasoning + recommendation
-- **Upload Claims** button on the dashboard → drag in `sample_claims_upload.csv` (or
-  download the in-app template) → optionally auto-analyze every uploaded claim
-- `/providers` → every provider's billing time series + average billed amount at a
-  glance → click into one for the full anomaly chart
+Deploying: [infra/terraform/README.md](infra/terraform/README.md) for the cluster, then the
+Argo CD applications in `infra/k8s/argocd/` (staging auto-syncs master, production syncs
+release tags manually).
 
 ---
 
 ## 11. 🗺️ Capability → Code Map (quick reference)
 
-<table>
-<tbody>
-<tr><td><img src="https://img.shields.io/badge/-Chain%20Reasoning-12B886?style=flat-square" /></td><td><code>services/claims-api/agent/graph.py::reasoning_node</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Agentic%20Generative%20AI-F59F00?style=flat-square" /></td><td><code>services/claims-api/agent/graph.py::recommendation_node</code> (+ conditional loop)</td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square" /></td><td><code>ml/train_models.py::train_classifier</code> (RandomForest) + <code>ml/inference.py::classify_claim</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Prediction-7048E8?style=flat-square" /></td><td><code>ml/train_models.py::train_predictor</code> (GradientBoosting) + <code>ml/inference.py::predict_payment</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Inference-495057?style=flat-square" /></td><td>Signal synthesis into <code>AnalysisResult</code> across <code>agent/graph.py</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Clustering-E64980?style=flat-square" /></td><td><code>ml/train_models.py::train_clustering</code> (KMeans) → <code>frontend/app/providers/</code></td></tr>
-<tr><td><img src="https://img.shields.io/badge/-Anomaly%20Detection-E8590C?style=flat-square" /></td><td><code>ml/train_models.py::train_anomaly_detector</code> (IsolationForest) → <code>components/AnomalyChart.tsx</code></td></tr>
-</tbody>
-</table>
-
----
-
-<div align="center">
-
-*This is a hackathon POC, not production software — no auth, no deployment config,
-models are trained offline via a one-time script rather than a full MLOps pipeline.*
-
-</div>
+| Capability | Where |
+|---|---|
+| Classification / prediction | `services/ml-service/ml/train_models.py`, `ml/inference.py`, `routers/scoring.py` |
+| Clustering / anomaly detection | `services/ml-service/ml/train_models.py` (precomputed into MongoDB) |
+| Chain reasoning / agentic loop | `services/ai-agent/agent/graph.py` |
+| Resilience (retry, timeout, breaker, fallback chain, hedging) | `libs/python/claims-common/src/claims_common/resilience/`, `services/ai-agent/ai_platform/client.py` |
+| Validation (JSON repair, schemas, repair prompts) | `services/ai-agent/ai_platform/validation/` |
+| Guardrails (PII, injection, output, policy, grounding) | `services/ai-agent/ai_platform/guardrails/` |
+| Rule-engine fallback | `services/ai-agent/ai_platform/fallback/rules.py` |
+| Judge, calibration, cache, budgets, prompt A/B | `ai_platform/judge.py`, `calibration.py`, `cache.py`, `pricing.py`, `prompts.py` |
+| Evaluation gate | `services/ai-agent/evals/` |
+| Audit trail / audit log | `ai_platform/audit.py`, `claims_common/audit_log.py` |
+| Auth, rate limits, security headers | `claims_common/auth.py`, `ratelimit.py`, `security_headers.py`, `internal_auth.py` |
+| Observability | `claims_common/metrics.py`, `tracing.py`, `ai_platform/metrics.py`, `infra/helm/claims-review/files/` |
