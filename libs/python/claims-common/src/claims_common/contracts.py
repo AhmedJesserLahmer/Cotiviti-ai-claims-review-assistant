@@ -68,6 +68,9 @@ class ScoreRequest(BaseModel):
     procedure_code: str = Field(min_length=1, max_length=20)
     patient_age: int = Field(ge=0, le=120)
     provider_avg_claim_amount: float = Field(ge=0, le=10_000_000)
+    # Lets the risk model apply the provider's learned risk effect (optional: unknown
+    # providers fall back to the average provider).
+    provider_id: str | None = Field(default=None, max_length=32)
 
 
 class ClassifyResponse(BaseModel):

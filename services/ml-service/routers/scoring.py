@@ -21,6 +21,8 @@ def _claim(body: ScoreRequest) -> dict:
 def _ood(body: ScoreRequest) -> list[str]:
     features = body.model_dump()
     features["age"] = features.pop("patient_age")
+    if features.get("provider_id") is None:
+        features.pop("provider_id", None)
     flags = ood_flags(features)
     for flag in flags:
         OOD_INPUTS.labels(flag.split("=")[0].replace("unknown ", "").split(" ")[0]).inc()

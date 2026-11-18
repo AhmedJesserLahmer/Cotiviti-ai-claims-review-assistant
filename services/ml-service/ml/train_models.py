@@ -18,17 +18,26 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import GradientBoostingRegressor, IsolationForest, RandomForestClassifier
+from sklearn.ensemble import GradientBoostingRegressor, IsolationForest
 from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from ml import ood, registry
+from ml.risk_model import FEATURES as RISK_FEATURES
+from ml.risk_model import RiskScoreClassifier
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 HOLDOUT_FRACTION = 0.2
 RANDOM_STATE = 42
+CV_FOLDS = 5
+# Training fails instead of publishing a model whose cross-validated macro-F1 is below this.
+MIN_MACRO_F1 = float(os.environ.get("MIN_MACRO_F1", "0.55"))
+
+
+class ModelQualityError(RuntimeError):
+    """The trained classifier is below the quality gate; no version is written."""
 
 # One distinct label per cost-rank tier (index 0 = cheapest cluster ... index 3 =
 # priciest). Kept fully separate from OUTLIER_LABEL below so the two labeling rules
@@ -66,24 +75,9 @@ def build_training_frame(claims, patients, providers):
     return df
 
 
-def train_classifier(df: pd.DataFrame):
-    features_num = ["billed_amount", "length_of_stay", "prior_claims_count", "age"]
-    features_cat = ["treatment_type", "procedure_code"]
-
-    X = df[features_num + features_cat]
-    y = df["risk_label"]
-
-    preprocessor = ColumnTransformer([
-        ("num", "passthrough", features_num),
-        ("cat", OneHotEncoder(handle_unknown="ignore"), features_cat),
-    ])
-    pipeline = Pipeline([
-        ("preprocess", preprocessor),
-        ("model", RandomForestClassifier(n_estimators=200, max_depth=8, random_state=42)),
-    ])
-    pipeline.fit(X, y)
-    pipeline.feature_columns_ = features_num + features_cat
-    return pipeline
+def train_classifier(df: pd.DataFrame) -> RiskScoreClassifier:
+    """Ordinal risk model with provider effects and macro-F1 cutoffs (ml/risk_model.py)."""
+    return RiskScoreClassifier(C=1.0, random_state=RANDOM_STATE).fit(df[RISK_FEATURES], df["risk_label"])
 
 
 def train_predictor(df: pd.DataFrame):
@@ -179,6 +173,39 @@ def _sha256(path: str) -> str:
     return digest.hexdigest()
 
 
+def cross_validated_macro_f1(df: pd.DataFrame) -> list[float]:
+    folds = StratifiedKFold(CV_FOLDS, shuffle=True, random_state=RANDOM_STATE)
+    scores = []
+    for train_idx, test_idx in folds.split(df, df["risk_label"]):
+        train, test = df.iloc[train_idx], df.iloc[test_idx]
+        predicted = train_classifier(train).predict(test[RISK_FEATURES])
+        scores.append(f1_score(test["risk_label"], predicted, average="macro"))
+    return scores
+
+
+def synthetic_noise_ceiling(df: pd.DataFrame, providers: pd.DataFrame) -> float | None:
+    """Macro-F1 of an oracle that knows the generator's hidden risk score (same folds).
+
+    Only possible on synthetic data (it uses the generator's latent provider risk, which
+    the model never sees). Reported so the model's score can be read against the best
+    achievable one: the label noise caps every model below this value.
+    """
+    if "risk_baseline" not in providers.columns:
+        return None
+    from ml.risk_model import tune_cutoffs
+
+    frame = df.merge(providers[["provider_id", "risk_baseline"]], on="provider_id", how="left")
+    score = (0.00015 * frame["billed_amount"] + 0.08 * frame["length_of_stay"]
+             + 0.05 * frame["prior_claims_count"] + 3.0 * frame["risk_baseline"]).to_numpy()
+    y = frame["risk_label"].map({"Low": 0, "Medium": 1, "High": 2}).to_numpy()
+    scores = []
+    for train_idx, test_idx in StratifiedKFold(CV_FOLDS, shuffle=True, random_state=RANDOM_STATE).split(frame, y):
+        low, high = tune_cutoffs(score[train_idx], y[train_idx])
+        predicted = np.where(score[test_idx] < low, 0, np.where(score[test_idx] < high, 1, 2))
+        scores.append(f1_score(y[test_idx], predicted, average="macro"))
+    return round(float(np.mean(scores)), 4)
+
+
 def evaluate_claim_models(df: pd.DataFrame) -> dict:
     """Holdout metrics: fit on 80%, score on 20%. Deployed models are refit on all rows."""
     train, test = train_test_split(
@@ -188,11 +215,18 @@ def evaluate_claim_models(df: pd.DataFrame) -> dict:
     predictor = train_predictor(train)
     predicted_labels = classifier.predict(test[classifier.feature_columns_])
     predicted_paid = predictor.predict(test[predictor.feature_columns_])
+    cv_scores = cross_validated_macro_f1(df)
     return {
         "holdout_rows": int(len(test)),
         "classifier": {
+            "model": "ordinal-logistic+provider-effects+macro-f1-cutoffs",
             "accuracy": round(float(accuracy_score(test["risk_label"], predicted_labels)), 4),
+            # Single 20% split: noisy (+/- ~0.03 on 300 rows); prefer the CV estimate.
             "macro_f1": round(float(f1_score(test["risk_label"], predicted_labels, average="macro")), 4),
+            # The more reliable estimate: mean and spread over stratified folds.
+            "cv_macro_f1_mean": round(float(np.mean(cv_scores)), 4),
+            "cv_macro_f1_std": round(float(np.std(cv_scores)), 4),
+            "cv_folds": CV_FOLDS,
         },
         "predictor": {
             "mae": round(float(mean_absolute_error(test["paid_amount"], predicted_paid)), 2),
@@ -206,6 +240,10 @@ def main():
     training_frame = build_training_frame(claims, patients, providers)
 
     metrics = evaluate_claim_models(training_frame)
+    metrics["classifier"]["synthetic_oracle_cv_macro_f1"] = synthetic_noise_ceiling(training_frame, providers)
+    cv_f1 = metrics["classifier"]["cv_macro_f1_mean"]
+    if cv_f1 < MIN_MACRO_F1:
+        raise ModelQualityError(f"cross-validated macro-F1 {cv_f1:.3f} < MIN_MACRO_F1 {MIN_MACRO_F1:.2f}")
     classifier = train_classifier(training_frame)
     predictor = train_predictor(training_frame)
 

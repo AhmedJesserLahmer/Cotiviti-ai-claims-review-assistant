@@ -28,14 +28,17 @@ def reload_bundle(version: str | None = None) -> ModelBundle:
 
 
 def classify_claim(claim: dict, patient: dict) -> tuple[str, dict[str, float]]:
+    """``patient`` is accepted for API stability; the current model does not use age."""
     classifier = get_bundle().classifier
     row = pd.DataFrame([{
         "billed_amount": claim["billed_amount"],
         "length_of_stay": claim["length_of_stay"],
         "prior_claims_count": claim["prior_claims_count"],
-        "age": patient["age"],
+        "age": patient.get("age"),
         "treatment_type": claim["treatment_type"],
         "procedure_code": claim["procedure_code"],
+        # Unknown or missing providers get the average provider effect.
+        "provider_id": claim.get("provider_id") or "__unknown__",
     }])
     label = classifier.predict(row)[0]
     proba = classifier.predict_proba(row)[0]
