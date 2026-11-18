@@ -1,0 +1,245 @@
+# Default values for claims-review. Environment overlays: values-dev.yaml,
+# values-staging.yaml, values-prod.yaml. Every key is documented inline.
+
+global:
+  # dev | staging | prod. "prod" turns on the production safety checks in the
+  # services (auth required, secrets required, docs disabled, HSTS).
+  environment: dev
+  # Registry prefix for all images, e.g. ghcr.io/<org>/claims-review.
+  imageRegistry: ghcr.io/example/claims-review
+  # Image tag for all components unless a component overrides it (default: appVersion).
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  logLevel: INFO
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  # The services never call the Kubernetes API.
+  automountToken: false
+  annotations: {}
+
+# --- credentials --------------------------------------------------------------------
+secrets:
+  # Use a Secret created out of band (recommended outside dev). Must contain the keys
+  # listed under `values`.
+  existingSecret: ""
+  # Create the Secret from `values` below (dev only; never commit real secrets).
+  create: true
+  values:
+    GROQ_API_KEY: ""
+    INTERNAL_TOKEN: ""
+    AUDIT_HMAC_KEY: ""
+    JWT_SECRET: ""
+  # Sync the Secret from a cloud secret manager with External Secrets Operator.
+  externalSecrets:
+    enabled: false
+    refreshInterval: 1h
+    secretStoreRef:
+      name: cluster-secret-store
+      kind: ClusterSecretStore
+    # Remote key holding a JSON object with the keys above.
+    remoteKey: claims-review/dev
+
+# --- components -----------------------------------------------------------------------
+# Shared shape: image, replicas, port, env (plain config), resources, autoscaling, pdb.
+
+claimsApi:
+  enabled: true
+  image:
+    repository: claims-api
+    tag: ""
+  replicas: 2
+  port: 8000
+  env:
+    CORS_ORIGINS: "https://claims.example.com"
+    AUTH_ENABLED: "false"
+    JWT_ISSUER: ""
+    JWT_AUDIENCE: "claims-api"
+    RATE_LIMIT_ANALYZE_PER_MINUTE: "30"
+    RATE_LIMIT_BULK_PER_MINUTE: "6"
+    FORWARDED_ALLOW_IPS: "*"
+  resources:
+    requests: {cpu: 100m, memory: 192Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+aiAgent:
+  enabled: true
+  image:
+    repository: ai-agent
+    tag: ""
+  replicas: 2
+  port: 8002
+  env:
+    GROQ_MODEL: llama-3.3-70b-versatile
+    AI_FALLBACK_MODELS: llama-3.1-8b-instant
+    AI_REQUEST_TIMEOUT_S: "20"
+    AI_MAX_RETRIES: "2"
+    AI_HEDGE_AFTER_S: "0"
+    AI_JUDGE_ENABLED: "false"
+    AI_MAX_TOKENS_PER_RUN: "12000"
+    AI_PROMPT_TRAFFIC: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 768Mi}
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+mlService:
+  enabled: true
+  image:
+    repository: ml-service
+    tag: ""
+  replicas: 2
+  port: 8001
+  env: {}
+  resources:
+    requests: {cpu: 200m, memory: 384Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+  pdb:
+    enabled: true
+    minAvailable: 1
+  # Shared model registry volume (written by the training CronJob). The baked-in
+  # model of the image is copied into it on first start.
+  models:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+      accessModes: [ReadWriteMany]
+
+worker:
+  enabled: true
+  image:
+    repository: claims-api   # same image as claims-api, different command
+    tag: ""
+  replicas: 1
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 384Mi}
+  pdb:
+    enabled: false
+    minAvailable: 0
+
+frontend:
+  enabled: true
+  image:
+    repository: frontend
+    tag: ""
+  replicas: 2
+  port: 3000
+  env: {}
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 384Mi}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+# --- data stores ----------------------------------------------------------------------
+mongodb:
+  # Single-node MongoDB inside the release (dev/staging). In production use a managed
+  # replica set (Atlas, DocumentDB, operator) and set enabled=false + externalUri.
+  enabled: true
+  externalUri: ""
+  image: mongo:7.0.14
+  storage: 5Gi
+  storageClass: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  dbName: claims_poc
+
+redis:
+  enabled: true
+  externalUrl: ""
+  image: redis:7.4.1-alpine
+  storage: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+# --- jobs -----------------------------------------------------------------------------
+seedJob:
+  # Seed the synthetic dataset after install (Helm hook). Disable for real data.
+  enabled: true
+
+training:
+  # Weekly retraining into the shared model registry volume.
+  enabled: false
+  schedule: "0 3 * * 0"
+  activate: false   # new versions are activated manually after review (MODEL_VERSION/API)
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: "2", memory: 2Gi}
+
+# --- networking -----------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  # Dashboard and API are served on separate hosts.
+  hosts:
+    app: claims.example.com
+    api: api.claims.example.com
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+  # Put the dashboard behind an OIDC proxy (oauth2-proxy) that forwards the bearer token.
+  oauth2Proxy:
+    enabled: false
+    authUrl: "https://oauth2.example.com/oauth2/auth"
+    signinUrl: "https://oauth2.example.com/oauth2/start?rd=$scheme://$host$request_uri"
+
+networkPolicy:
+  # Default-deny with explicit allow rules between components.
+  enabled: true
+  # Namespace label of the ingress controller allowed to reach frontend/claims-api.
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
+  # Namespace label of Prometheus, allowed to scrape /metrics.
+  monitoringNamespaceSelector:
+    kubernetes.io/metadata.name: monitoring
+
+# --- observability --------------------------------------------------------------------
+observability:
+  otlpEndpoint: ""   # e.g. http://otel-collector.monitoring:4318
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
+  grafanaDashboard:
+    enabled: false
+    labels:
+      grafana_dashboard: "1"
