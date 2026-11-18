@@ -1,5 +1,6 @@
 locals {
   tags = merge(var.tags, { "app.kubernetes.io/part-of" = "claims-review", "managed-by" = "terraform" })
+
   # Secret consumed by External Secrets (keys: GROQ_API_KEY, INTERNAL_TOKEN, AUDIT_HMAC_KEY, JWT_SECRET).
   secret_name = "claims-review/${var.app_namespace}"
 }
@@ -41,23 +42,27 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  cluster_endpoint_public_access       = true
-  cluster_endpoint_public_access_cidrs = var.api_allowed_cidrs
+  cluster_endpoint_public_access           = true
+  cluster_endpoint_public_access_cidrs     = var.api_allowed_cidrs
   enable_cluster_creator_admin_permissions = true
   enable_irsa                              = true
 
   cluster_addons = {
     coredns    = { most_recent = true }
     kube-proxy = { most_recent = true }
+
     vpc-cni = {
       most_recent = true
+
       # Enforce Kubernetes NetworkPolicies natively (the chart is default-deny).
       configuration_values = jsonencode({ enableNetworkPolicy = "true" })
     }
+
     aws-ebs-csi-driver = {
       most_recent              = true
       service_account_role_arn = module.ebs_csi_irsa.iam_role_arn
     }
+
     aws-efs-csi-driver = {
       most_recent              = true
       service_account_role_arn = module.efs_csi_irsa.iam_role_arn
@@ -71,6 +76,7 @@ module "eks" {
       min_size       = var.node_min_size
       max_size       = var.node_max_size
       desired_size   = var.node_desired_size
+
       # IMDSv2 only, so pods cannot borrow the node's IAM role.
       metadata_options = {
         http_tokens                 = "required"
@@ -88,12 +94,14 @@ module "ebs_csi_irsa" {
 
   role_name             = "${var.name}-ebs-csi"
   attach_ebs_csi_policy = true
+
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
     }
   }
+
   tags = local.tags
 }
 
@@ -103,12 +111,14 @@ module "efs_csi_irsa" {
 
   role_name             = "${var.name}-efs-csi"
   attach_efs_csi_policy = true
+
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["kube-system:efs-csi-controller-sa"]
     }
   }
+
   tags = local.tags
 }
 
@@ -127,6 +137,7 @@ resource "aws_security_group" "efs" {
     protocol        = "tcp"
     security_groups = [module.eks.node_security_group_id]
   }
+
   tags = local.tags
 }
 
@@ -139,6 +150,7 @@ resource "aws_efs_file_system" "models" {
   lifecycle_policy {
     transition_to_ia = "AFTER_30_DAYS"
   }
+
   tags = merge(local.tags, { Name = "${var.name}-models" })
 }
 
@@ -169,6 +181,7 @@ resource "aws_security_group" "redis" {
     protocol        = "tcp"
     security_groups = [module.eks.node_security_group_id]
   }
+
   tags = local.tags
 }
 
@@ -186,6 +199,7 @@ resource "aws_elasticache_replication_group" "redis" {
   subnet_group_name          = aws_elasticache_subnet_group.redis.name
   security_group_ids         = [aws_security_group.redis.id]
   snapshot_retention_limit   = 3
+
   # The job queue must not lose entries under memory pressure.
   parameter_group_name = aws_elasticache_parameter_group.redis.name
   tags                 = local.tags
@@ -231,14 +245,17 @@ module "external_secrets_irsa" {
   version = "~> 5.48"
 
   role_name = "${var.name}-external-secrets"
+
   role_policy_arns = {
     read = aws_iam_policy.external_secrets.arn
   }
+
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["external-secrets:external-secrets"]
     }
   }
+
   tags = local.tags
 }
