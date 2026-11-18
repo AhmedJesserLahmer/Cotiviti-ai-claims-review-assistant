@@ -26,6 +26,8 @@ services:
   mongo:
     image: mongo:7
     container_name: claims_poc_mongo
+    # The default WiredTiger cache is ~50% of RAM; the dataset is a few MB.
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     ports:
       - "27017:27017"
     volumes:
