@@ -1,0 +1,46 @@
+{{- if .Values.mlService.enabled }}
+{{- $persist := .Values.mlService.models.persistence.enabled -}}
+{{- $name := include "claims-review.componentName" (dict "root" . "component" "ml-service") -}}
+{{- $env := list
+  (dict "name" "MONGO_URI" "value" (include "claims-review.mongoUri" .))
+  (dict "name" "MONGO_DB_NAME" "value" .Values.mongodb.dbName)
+  (dict "name" "SEED_ON_START" "value" "false")
+-}}
+{{- if $persist }}{{- $env = append $env (dict "name" "MODELS_DIR" "value" "/models") -}}{{- end }}
+{{- $secretEnv := list -}}
+{{- range (list "INTERNAL_TOKEN") }}{{- $secretEnv = append $secretEnv (dict "name" . "valueFrom" (dict "secretKeyRef" (dict "name" (include "claims-review.secretName" $) "key" . "optional" true))) -}}{{- end }}
+{{- $volumes := list -}}
+{{- $mounts := list -}}
+{{- $init := list -}}
+{{- if $persist }}
+{{- $volumes = list (dict "name" "models" "persistentVolumeClaim" (dict "claimName" (printf "%s-models" $name))) -}}
+{{- $mounts = list (dict "name" "models" "mountPath" "/models") -}}
+{{- $init = list (dict
+  "name" "seed-model-registry"
+  "image" (include "claims-review.image" (dict "root" . "values" .Values.mlService))
+  "command" (list "sh" "-c" "[ -f /models/CURRENT ] || cp -r /app/ml/models/. /models/")
+  "securityContext" (fromYaml (include "claims-review.containerSecurityContext" .))
+  "volumeMounts" (list (dict "name" "models" "mountPath" "/models"))) -}}
+{{- end }}
+{{ include "claims-review.workload" (dict "root" . "component" "ml-service" "values" .Values.mlService "port" .Values.mlService.port "env" (concat $env $secretEnv) "volumes" $volumes "volumeMounts" $mounts "initContainers" $init) }}
+{{- if $persist }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-models
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" . "component" "ml-service") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep   # never delete trained models on uninstall
+spec:
+  accessModes:
+    {{- toYaml .Values.mlService.models.persistence.accessModes | nindent 4 }}
+  {{- with .Values.mlService.models.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.mlService.models.persistence.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,9 @@
+{{- if .Values.frontend.enabled }}
+{{- $env := list
+  (dict "name" "INTERNAL_API_BASE_URL" "value" (include "claims-review.url" (dict "root" . "component" "claims-api" "port" .Values.claimsApi.port)))
+  (dict "name" "HOSTNAME" "value" "0.0.0.0")
+-}}
+{{- $volumes := list (dict "name" "next-cache" "emptyDir" (dict "sizeLimit" "512Mi")) -}}
+{{- $mounts := list (dict "name" "next-cache" "mountPath" "/app/.next/cache") -}}
+{{ include "claims-review.workload" (dict "root" . "component" "frontend" "values" .Values.frontend "port" .Values.frontend.port "env" $env "probes" "tcp" "volumes" $volumes "volumeMounts" $mounts) }}
+{{- end }}
