@@ -43,3 +43,26 @@ def test_valid_token_passes_authentication(auth_on, monkeypatch):
     monkeypatch.setattr(providers, "db", {"providers": Empty()})
     token = jwt.encode({"sub": "rev-7", "exp": int(time.time()) + 60, "roles": ["reviewer"]}, SECRET, algorithm="HS256")
     assert auth_on.get("/providers", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+def _token(sub, roles):
+    return jwt.encode({"sub": sub, "exp": int(time.time()) + 60, "roles": roles}, SECRET, algorithm="HS256")
+
+
+def test_role_checks(auth_on):
+    reviewer = {"Authorization": f"Bearer {_token('rev-1', ['reviewer'])}"}
+    nobody = {"Authorization": f"Bearer {_token('x', ['guest'])}"}
+    assert auth_on.post("/seed", headers=reviewer).status_code == 403
+    assert auth_on.get("/claims", headers=nobody).status_code == 403
+
+
+def test_feedback_reviewer_comes_from_the_token(auth_on, monkeypatch):
+    from routers import feedback
+    from tests.fakes import FakeCollection, FakeDB
+
+    analyses = FakeCollection([{"claim_id": "C1", "recommendation": "approve", "ai_metadata": {}}])
+    monkeypatch.setattr(feedback, "db", FakeDB(claim_analyses=analyses, claim_feedback=FakeCollection()))
+    headers = {"Authorization": f"Bearer {_token('real-reviewer', ['reviewer'])}"}
+    body = {"verdict": "agree", "final_decision": "approve", "reviewer": "someone-else"}
+    saved = auth_on.post("/claims/C1/feedback", json=body, headers=headers).json()
+    assert saved["reviewer"] == "real-reviewer"

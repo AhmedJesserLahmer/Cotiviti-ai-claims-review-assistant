@@ -8,4 +8,10 @@ auth_settings.check_production(settings.is_production)
 
 get_principal, require_roles = build_auth(auth_settings)
 
-__all__ = ["Principal", "auth_settings", "get_principal", "require_roles"]
+# Role model:
+#   reviewer  read claims/providers, run analyses, give feedback, upload claims, run jobs
+#   admin     everything a reviewer can do, plus re-seeding the dataset
+reviewer = require_roles("reviewer", "admin")
+admin = require_roles("admin")
+
+__all__ = ["Principal", "admin", "auth_settings", "get_principal", "require_roles", "reviewer"]

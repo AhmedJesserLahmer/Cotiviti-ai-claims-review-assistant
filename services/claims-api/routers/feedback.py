@@ -10,9 +10,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from core.security import Principal, get_principal
 from db.mongo import db
 
 router = APIRouter(tags=["feedback"])
@@ -36,7 +37,7 @@ class FeedbackOut(FeedbackIn):
 
 
 @router.post("/claims/{claim_id}/feedback", response_model=FeedbackOut, status_code=201)
-async def submit_feedback(claim_id: str, body: FeedbackIn):
+async def submit_feedback(claim_id: str, body: FeedbackIn, principal: Principal = Depends(get_principal)):
     analysis = await db["claim_analyses"].find_one({"claim_id": claim_id}, {"_id": 0})
     if not analysis:
         raise HTTPException(status_code=404, detail="No AI analysis to give feedback on for this claim")
@@ -48,6 +49,9 @@ async def submit_feedback(claim_id: str, body: FeedbackIn):
     meta = analysis.get("ai_metadata") or {}
     record = {
         **body.model_dump(),
+        # With authentication the reviewer is whoever holds the token, not a form field.
+        "reviewer": principal.subject if principal.authenticated else body.reviewer,
+        "reviewer_authenticated": principal.authenticated,
         "claim_id": claim_id,
         "ai_recommendation": analysis["recommendation"],
         "ai_run_id": meta.get("run_id"),
