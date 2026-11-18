@@ -12,6 +12,7 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from claims_common.health import ReadinessCheck, build_health_router
+from claims_common.internal_auth import InternalAuthMiddleware
 from claims_common.logging import RequestContextMiddleware, configure_logging
 from claims_common.metrics import MetricsMiddleware, render_latest
 from claims_common.settings import ServiceSettings
@@ -26,6 +27,7 @@ def create_app(
     readiness_checks: dict[str, ReadinessCheck] | None = None,
     health_info: Callable[[], dict] | None = None,
     cors: bool = True,
+    internal: bool = False,
     **fastapi_kwargs,
 ) -> FastAPI:
     configure_logging(settings.log_level, settings.log_format)
@@ -45,6 +47,12 @@ def create_app(
             allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
             expose_headers=["X-Request-ID"],
         )
+    if internal:
+        # Internal services only accept calls carrying the shared token.
+        if settings.internal_token:
+            app.add_middleware(InternalAuthMiddleware, token=settings.internal_token)
+        elif settings.is_production:
+            raise RuntimeError("INTERNAL_TOKEN is required for internal services when ENVIRONMENT=prod")
     app.add_middleware(MetricsMiddleware, service=settings.service_name)
     # Added last so it wraps everything, including CORS preflight responses.
     app.add_middleware(RequestContextMiddleware)

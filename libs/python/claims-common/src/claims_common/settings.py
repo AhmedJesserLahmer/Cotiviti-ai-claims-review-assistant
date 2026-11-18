@@ -14,6 +14,8 @@ class ServiceSettings(BaseSettings):
     log_format: str = "json"
     # Comma-separated list of browser origins allowed to call the service.
     cors_origins: str = "http://localhost:3000"
+    # Shared secret for service-to-service calls (X-Internal-Token).
+    internal_token: str = ""
     # HMAC key signing audit-log entries (>= 32 chars, required in production).
     audit_hmac_key: str = ""
     # /metrics for Prometheus. In Kubernetes a NetworkPolicy restricts who can scrape it.

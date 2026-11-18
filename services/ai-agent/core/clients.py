@@ -1,6 +1,7 @@
 """Clients for downstream services, created once per process."""
 
 from claims_common.http import ServiceClient
+from claims_common.internal_auth import internal_headers
 from core.config import settings
 
 _ml_service: ServiceClient | None = None
@@ -9,7 +10,12 @@ _ml_service: ServiceClient | None = None
 def get_ml_service() -> ServiceClient:
     global _ml_service
     if _ml_service is None:
-        _ml_service = ServiceClient("ml-service", settings.ml_service_url, timeout_s=settings.ml_service_timeout_s)
+        _ml_service = ServiceClient(
+            "ml-service",
+            settings.ml_service_url,
+            timeout_s=settings.ml_service_timeout_s,
+            headers=internal_headers(settings.internal_token),
+        )
     return _ml_service
 
 

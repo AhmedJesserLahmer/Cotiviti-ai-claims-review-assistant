@@ -26,6 +26,7 @@ app = create_app(
     readiness_checks=health.READINESS_CHECKS,
     health_info=lambda: {"ai": get_claim_review_ai().health(), "dependencies": [get_ml_service().snapshot()]},
     cors=False,
+    internal=True,
     lifespan=lifespan,
 )
 

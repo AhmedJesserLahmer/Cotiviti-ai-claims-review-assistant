@@ -17,6 +17,8 @@ x-service-env: &service-env
   MONGO_URI: mongodb://mongo:27017
   MONGO_DB_NAME: claims_poc
   LOG_FORMAT: json
+  # Service-to-service shared secret; set INTERNAL_TOKEN in .env to enable checks.
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
   # Traces go to Jaeger when the observability profile runs; harmless otherwise.
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
