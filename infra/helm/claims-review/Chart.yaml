@@ -1,11 +1,12 @@
 apiVersion: v2
 name: claims-review
-description: AI claims review platform - claims-api, ai-agent, ml-service, worker and dashboard.
+description: AI claims review platform - claims-api, ai-agent, ml-service,
+  worker and dashboard.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.3.0"
 kubeVersion: ">=1.27.0-0"
-keywords: [healthcare, claims, ai, langgraph]
+keywords: [ healthcare, claims, ai, langgraph ]
 home: https://github.com/example/claims-review
 maintainers:
   - name: Claims Review maintainers

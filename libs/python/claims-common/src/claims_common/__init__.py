@@ -6,4 +6,4 @@ FastAPI app factory, health probes, resilience primitives and the service-to-ser
 HTTP client.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

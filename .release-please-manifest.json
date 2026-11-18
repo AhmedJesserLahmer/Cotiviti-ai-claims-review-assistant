@@ -1,8 +1,8 @@
 {
-  "services/claims-api": "0.3.0",
-  "services/ai-agent": "0.1.0",
-  "services/ml-service": "0.1.0",
-  "frontend": "0.1.0",
-  "libs/python/claims-common": "0.1.0",
-  "infra/helm/claims-review": "0.1.0"
+  "services/claims-api": "0.4.0",
+  "services/ai-agent": "0.2.0",
+  "services/ml-service": "0.2.0",
+  "frontend": "0.2.0",
+  "libs/python/claims-common": "0.2.0",
+  "infra/helm/claims-review": "0.2.0"
 }
