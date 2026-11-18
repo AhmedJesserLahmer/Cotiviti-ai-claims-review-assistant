@@ -15,6 +15,7 @@ from claims_common.health import ReadinessCheck, build_health_router
 from claims_common.internal_auth import InternalAuthMiddleware
 from claims_common.logging import RequestContextMiddleware, configure_logging
 from claims_common.metrics import MetricsMiddleware, render_latest
+from claims_common.security_headers import SecurityHeadersMiddleware
 from claims_common.settings import ServiceSettings
 from claims_common.tracing import setup_tracing
 
@@ -53,6 +54,7 @@ def create_app(
             app.add_middleware(InternalAuthMiddleware, token=settings.internal_token)
         elif settings.is_production:
             raise RuntimeError("INTERNAL_TOKEN is required for internal services when ENVIRONMENT=prod")
+    app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
     app.add_middleware(MetricsMiddleware, service=settings.service_name)
     # Added last so it wraps everything, including CORS preflight responses.
     app.add_middleware(RequestContextMiddleware)
