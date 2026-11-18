@@ -114,23 +114,26 @@ A claims reviewer opens a claim and clicks **Run AI Analysis**. Under the hood:
 ### 🎬 The human flow, visually
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
 flowchart LR
-    A(["🧑‍⚕️<br/>Reviewer opens<br/>the dashboard"]) --> B["📋<br/>Picks a claim<br/>(or uploads a CSV)"]
-    B --> C["🧮<br/>Backend runs 4 ML signals<br/>classification · prediction<br/>clustering · anomaly lookup"]
-    C --> D["🧠<br/>LangGraph agent reasons<br/>step-by-step via Groq"]
-    D --> E{"🤖<br/>Agent decides"}
-    E -->|"needs more data"| C
-    E -->|"approve / flag"| F["💾<br/>Saved to MongoDB"]
-    F --> G["📊<br/>Dashboard shows signals,<br/>reasoning & recommendation"]
+    A([Reviewer opens a claim<br/>or uploads a CSV]):::terminal
+    B["<b>Score the claim</b><br/>risk class · expected payment"]:::step
+    C["<b>Add provider context</b><br/>behaviour cluster · billing anomalies"]:::step
+    D["<b>Reason step by step</b><br/>LLM over all four signals"]:::ai
+    E{"Recommend"}:::decision
+    F[("Stored with<br/>audit trail")]:::store
+    G(["Reviewer agrees<br/>or overrides"]):::terminal
 
-    style A fill:#ffd6ec,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style B fill:#ffe8b3,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style C fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style D fill:#c3aaff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style E fill:#ffd6ec,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style F fill:#a8f5e6,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style G fill:#ffe8b3,stroke:#2e1650,stroke-width:2px,color:#1a1030
+    A --> B --> C --> D --> E
+    E -- "needs more data" --> C
+    E -- "approve · flag for review" --> F --> G
+
+    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
+    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
+    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
+    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
 ```
 
 ---
@@ -142,20 +145,43 @@ library, a Next.js dashboard, and infrastructure for Docker Compose, Kubernetes 
 Argo CD) and AWS (Terraform).
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "14px"}}}%%
-flowchart LR
-    U["🧑‍⚕️ Reviewer"] --> FE["frontend<br/>Next.js :3000"]
-    FE -->|"REST + SSE<br/>JWT"| API["claims-api :8000<br/>gateway · auth · rate limits<br/>uploads · jobs · feedback"]
-    API -->|"X-Internal-Token"| AG["ai-agent :8002<br/>LangGraph + AI reliability layer"]
-    API --> Q[("Redis<br/>jobs · cache · limits")]
-    Q --> W["claims-worker<br/>arq"]
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
+flowchart TB
+    U(["Reviewer"]):::terminal
+    FE["<b>frontend</b><br/>Next.js dashboard · :3000"]:::step
+    API["<b>claims-api</b> · :8000<br/>gateway · auth · rate limits<br/>uploads · jobs · feedback"]:::step
+
+    subgraph CORE["Analysis services"]
+        W["<b>claims-worker</b><br/>async bulk analysis"]:::step
+        AG["<b>ai-agent</b> · :8002<br/>LangGraph agent<br/>AI reliability layer"]:::ai
+        ML["<b>ml-service</b> · :8001<br/>model registry · scoring<br/>out-of-distribution guard"]:::step
+    end
+
+    Q[("Redis<br/>jobs · cache · limits")]:::store
+    DB[("MongoDB<br/>claims · analyses · audit")]:::store
+
+    LLM["<b>LLM providers</b><br/>Groq model chain<br/>OpenAI-compatible fallback"]:::external
+    OBS["<b>Observability</b><br/>Prometheus · Grafana · Jaeger"]:::external
+
+    U --> FE
+    FE -- "REST · SSE · JWT" --> API
+    API -- "enqueue" --> Q
+    Q --> W
+    API -- "internal token" --> AG
     W --> AG
-    AG -->|"/v1/score"| ML["ml-service :8001<br/>model registry · inference<br/>OOD guard · seeding"]
-    AG -->|"retries · fallbacks<br/>circuit breakers"| LLM[["Groq chain →<br/>OpenAI-compatible"]]
-    API --> DB[("MongoDB")]
+    AG -- "/v1/score" --> ML
+    AG -- "retries · fallbacks<br/>circuit breakers" --> LLM
     AG --> DB
     ML --> DB
-    AG & API & ML -.->|"OTel traces · /metrics"| OBS["Prometheus · Grafana · Jaeger"]
+    API --> DB
+    API -. "traces · metrics<br/>(every service)" .-> OBS
+
+    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
+    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
+    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
+    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
 ```
 
 | Service | Owns | Docs |
@@ -177,23 +203,26 @@ The agent is a `StateGraph` (`services/ai-agent/agent/graph.py`) with a shared t
 **once** to fetch a wider data window before deciding — this is the *agentic* behavior.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
 flowchart TD
-    START(["START"]) --> A["fetch_claim_context<br/><i>pull claim + patient + provider<br/>+ time-series window from MongoDB</i>"]
-    A --> B["run_ml_signals<br/><i>classification · prediction<br/>clustering lookup · anomaly lookup</i>"]
-    B --> C["reasoning_node<br/><b>Chain Reasoning</b><br/><i>Groq: step-by-step reasoning<br/>over all ML signals</i>"]
-    C --> D["recommendation_node<br/><b>Agentic Generative AI</b><br/><i>Groq: decide the action</i>"]
-    D -->|"request_more_data<br/>(loops ≤ 1)"| A
-    D -->|"approve / flag_for_review"| E["persist_result<br/><i>upsert into claim_analyses</i>"]
-    E --> END(["END"])
+    S([START]):::terminal
+    A["<b>fetch_claim_context</b><br/>claim, patient, provider and a<br/>30-day billing window from MongoDB"]:::step
+    B["<b>run_ml_signals</b><br/>classification · prediction<br/>clustering · anomaly lookup"]:::step
+    C["<b>reasoning_node</b><br/>chain reasoning over the signals"]:::ai
+    D(["<b>recommendation_node</b><br/>decide the action"]):::decision
+    E["<b>persist_result</b><br/>upsert into claim_analyses"]:::step
+    X([END]):::terminal
 
-    style START fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style A fill:#b3e0ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style B fill:#a8f5e6,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style C fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style D fill:#ffd6ec,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style E fill:#ffe8b3,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style END fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
+    S --> A --> B --> C --> D
+    D -- "request_more_data<br/>(90-day window, once)" --> A
+    D -- "approve · flag_for_review" --> E --> X
+
+    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
+    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
+    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
+    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
 ```
 
 | Node | File / function | Responsibility | Capability |
@@ -304,19 +333,24 @@ region — only whichever numeric columns you feed it.**
 ### The algorithm, step by step
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede4ff", "primaryBorderColor": "#2e1650", "primaryTextColor": "#1a1030", "lineColor": "#7e3ff2", "fontSize": "15px", "edgeLabelBackground": "#ede4ff", "secondaryColor": "#ede4ff", "tertiaryColor": "#ede4ff"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryColor": "#ffffff", "primaryBorderColor": "#5b2d8e", "primaryTextColor": "#2e1650", "lineColor": "#9b86b8", "clusterBkg": "#f8f5fc", "clusterBorder": "#d8cce8", "edgeLabelBackground": "#ffffff", "titleColor": "#5b2d8e"}, "flowchart": {"curve": "basis", "nodeSpacing": 36, "rankSpacing": 48, "padding": 12}}}%%
 flowchart TD
-    S["🎯 Pick k=4 random<br/>starting centroids"] --> A["📍 Assign every provider<br/>to its nearest centroid"]
-    A --> M["📐 Move each centroid to the<br/>average position of its<br/>assigned providers"]
-    M --> C{"Did any provider<br/>switch centroids?"}
-    C -->|"Yes — keep going"| A
-    C -->|"No — converged"| R["✅ Final 4 clusters<br/>(repeat whole process 10x<br/>with new random starts,<br/>keep the tightest result)"]
+    S["<b>Initialise</b><br/>place k = 4 random centroids"]:::step
+    A["<b>Assign</b><br/>each provider to its nearest centroid"]:::step
+    M["<b>Update</b><br/>move each centroid to the mean<br/>of its assigned providers"]:::step
+    C{"Changed?"}:::decision
+    R(["<b>Converged</b><br/>best of 10 random starts kept"]):::terminal
 
-    style S fill:#ffd6ec,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style A fill:#d9c7ff,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style M fill:#a8f5e6,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style C fill:#ffe8b3,stroke:#2e1650,stroke-width:2px,color:#1a1030
-    style R fill:#c3f7a8,stroke:#2e1650,stroke-width:2px,color:#1a1030
+    S --> A --> M --> C
+    C -- "yes, reassign" --> A
+    C -- "no" --> R
+
+    classDef step fill:#ffffff,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef ai fill:#f1eafb,stroke:#5b2d8e,stroke-width:1.5px,color:#2e1650
+    classDef decision fill:#fff0f7,stroke:#d6086f,stroke-width:1.5px,color:#2e1650
+    classDef store fill:#f4f1f8,stroke:#6b5a86,stroke-width:1.5px,color:#2e1650
+    classDef external fill:#f6f6f8,stroke:#8a8798,stroke-width:1.5px,stroke-dasharray:4 3,color:#3d3a4a
+    classDef terminal fill:#5b2d8e,stroke:#5b2d8e,stroke-width:1.5px,color:#ffffff
 ```
 
 1. **Pick centroids** — `k` (here, 4) random points are dropped into the same 4-D space
