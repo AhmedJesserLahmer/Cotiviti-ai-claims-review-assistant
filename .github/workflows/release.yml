@@ -18,7 +18,7 @@ jobs:
       chart_released: ${{ steps.release.outputs['infra/helm/claims-review--release_created'] }}
       chart_version: ${{ steps.release.outputs['infra/helm/claims-review--version'] }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
