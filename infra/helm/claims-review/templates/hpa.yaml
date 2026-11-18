@@ -1,0 +1,46 @@
+{{- $components := dict "claims-api" .Values.claimsApi "ai-agent" .Values.aiAgent "ml-service" .Values.mlService "frontend" .Values.frontend }}
+{{- range $component, $v := $components }}
+{{- if and $v.enabled $v.autoscaling $v.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "claims-review.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "claims-review.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "claims-review.componentName" (dict "root" $ "component" $component) }}
+  minReplicas: {{ $v.autoscaling.minReplicas }}
+  maxReplicas: {{ $v.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $v.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    # Scale up quickly on bursts (bulk uploads), scale down slowly to avoid flapping.
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+{{- end }}
+{{- end }}
