@@ -181,7 +181,36 @@ Branch: `feat/ci-cd`
 - [x] 110. docs: add architecture decision records
 - [x] 111. docs: rewrite README architecture, layout, API and run sections
 
+## Phase 8: Model quality
+
+Branch: `feat/ml-model-quality`
+
+- [x] 112. docs: update the roadmap to what was delivered
+- [x] 113. feat(ml-service): replace the risk classifier, macro-F1 0.35 -> 0.60
+- [x] 114. docs: add ADR 0010 for the risk classifier
+
+## Phase 9: Findings from running the full stack
+
+Branch: `fix/live-stack-findings`. Each fix comes from building the images, running the
+stack against the real Groq API and testing it in the browser.
+
+- [x] 115. build(ml-service): keep the local model registry out of the image
+- [x] 116. build(infra): cap the MongoDB cache in the local compose stack
+- [x] 117. fix(claims-api): reject uploaded fields longer than the scoring contract
+- [x] 118. fix(ai-agent): answer 422 when a stored claim cannot be scored
+- [x] 119. fix(ai): use asyncio.timeout so cancelled hedges end cleanly
+- [x] 120. fix(frontend): format amounts with a fixed locale
+- [x] 121. fix(ml-service): seed MongoDB at startup only when it is empty
+- [x] 122. style(ai-agent): use union types in isinstance checks (ruff UP038)
+- [x] 123. fix(ai): move off the Llama models Groq retired
+- [x] 124. fix(frontend): resync package-lock.json with package.json
+- [x] 125. fix(frontend): render LLM bold text and always show two-digit cents
+
 ## Next
+
+- [ ] Ground recommendations in payer policy (coverage policies, coding edits) and cite them
+- [ ] Check that the reasoning and the summary agree (an LLM judge for contradictions)
+- [ ] A small human-labelled evaluation set for reasoning quality
 
 - [ ] Replace the shared internal token with service-mesh mTLS identities (ADR 0008)
 - [ ] Move the model registry to MLflow once several models are trained (ADR 0009)

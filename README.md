@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/cotiviti-logo-dark.png">
+  <img src="assets/cotiviti-logo-light.png" alt="Cotiviti" width="160">
+</picture>
+
 # 🩺 AI Claims Review Assistant
 
 ### Cotiviti Intern Assessment · Topic 2 — Clinical Decision Making & Pattern Recognition in Health Care
@@ -96,10 +101,13 @@ A claims reviewer opens a claim and clicks **Run AI Analysis**. Under the hood:
 2. Two other ML models contribute **pre-computed context** about the claim's provider
    (which behavioral cluster it belongs to, whether its recent billing looks anomalous).
 3. A **LangGraph** agent reads all four signals, writes out step-by-step reasoning
-   (chain reasoning), and — via a real call to **Groq**'s LLM — decides a final action:
+   (chain reasoning), and — via a real call to an LLM on **Groq** (`openai/gpt-oss-120b`,
+   falling back to `qwen/qwen3.8-27b` then `openai/gpt-oss-20b`) — decides a final action:
    `approve`, `flag_for_review`, or `request_more_data`. If it's unsure, it can loop
    back and re-fetch a wider data window before deciding again (this loop is what makes
-   it *agentic*, not just a single prompt-response).
+   it *agentic*, not just a single prompt-response). Guardrails and policy rules check
+   every answer; if no model is reachable, a deterministic rule engine decides and the
+   result is marked *degraded*.
 4. The full result is saved to MongoDB and rendered on a Cotiviti-branded Next.js
    dashboard. Claims can also be **bulk-uploaded via CSV** (one or many at once).
 
@@ -190,14 +198,14 @@ flowchart TD
 
 | Node | File / function | Responsibility | Capability |
 |------|------|----------------|-----------|
-| `fetch_claim_context` | `agent/graph.py:39` | Load claim/patient/provider + a 30-day (or 90-day on retry) timeseries window from Mongo | — |
-| `run_ml_signals` | `agent/graph.py:65` | Call the 4 scikit-learn signal sources | ![Classification](https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square) ![Prediction](https://img.shields.io/badge/-Prediction-7048E8?style=flat-square) ![Clustering](https://img.shields.io/badge/-Clustering-E64980?style=flat-square) ![Anomaly](https://img.shields.io/badge/-Anomaly-E8590C?style=flat-square) |
-| `reasoning_node` | `agent/graph.py:91` | Groq produces 4-6 numbered chain-of-thought steps over the signals | ![Chain Reasoning](https://img.shields.io/badge/-Chain%20Reasoning-12B886?style=flat-square) |
-| `recommendation_node` | `agent/graph.py:113` | Groq decides the action; can request more data (bounded by `MAX_LOOPS = 1`) | ![Agentic AI](https://img.shields.io/badge/-Agentic%20Generative%20AI-F59F00?style=flat-square) |
-| `persist_result` | `agent/graph.py:153` | Upsert the `AnalysisResult` into `claim_analyses` | — |
+| `fetch_claim_context` | `agent/graph.py:57` | Load claim/patient/provider + a 30-day (or 90-day on retry) timeseries window from Mongo | — |
+| `run_ml_signals` | `agent/graph.py:103` | Call the 4 scikit-learn signal sources | ![Classification](https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square) ![Prediction](https://img.shields.io/badge/-Prediction-7048E8?style=flat-square) ![Clustering](https://img.shields.io/badge/-Clustering-E64980?style=flat-square) ![Anomaly](https://img.shields.io/badge/-Anomaly-E8590C?style=flat-square) |
+| `reasoning_node` | `agent/graph.py:143` | Groq produces 4-6 numbered chain-of-thought steps over the signals | ![Chain Reasoning](https://img.shields.io/badge/-Chain%20Reasoning-12B886?style=flat-square) |
+| `recommendation_node` | `agent/graph.py:154` | Groq decides the action; can request more data (bounded by `MAX_LOOPS = 1`) | ![Agentic AI](https://img.shields.io/badge/-Agentic%20Generative%20AI-F59F00?style=flat-square) |
+| `persist_result` | `agent/graph.py:173` | Upsert the `AnalysisResult` into `claim_analyses` | — |
 
-The graph itself is wired in `build_graph()` (`agent/graph.py:174`), and
-`_route_after_recommendation()` (`agent/graph.py:168`) is the conditional edge that
+The graph itself is wired in `build_graph()` (`agent/graph.py:229`), and
+`_route_after_recommendation()` (`agent/graph.py:223`) is the conditional edge that
 implements the loop-back.
 
 ---
@@ -213,7 +221,7 @@ implements the loop-back.
 <tr>
 <td><img src="https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square" /></td>
 <td>Sort something into a labeled bucket</td>
-<td>Looks at <i>this claim's</i> amount, procedure, treatment type, patient age, etc. and predicts a risk bucket: <code>Low</code> / <code>Medium</code> / <code>High</code></td>
+<td>Looks at <i>this claim's</i> billed amount, length of stay, prior claims and the provider's track record, and predicts a risk bucket: <code>Low</code> / <code>Medium</code> / <code>High</code></td>
 <td><img src="https://img.shields.io/badge/-LIVE-2ea44f?style=flat-square" /><br/><code>ml/inference.py::classify_claim()</code></td>
 </tr>
 
@@ -330,7 +338,7 @@ flowchart TD
 ### Where this lives in the code
 
 ```python
-# services/ml-service/ml/train_models.py:95-121  (train_clustering)
+# services/ml-service/ml/train_models.py:103-125  (train_clustering)
 feature_cols = ["avg_billed", "claim_volume", "denial_rate", "avg_length_of_stay"]
 scaler = StandardScaler()                    # put all 4 axes on comparable scale
 X_scaled = scaler.fit_transform(agg[feature_cols])
@@ -367,7 +375,7 @@ flag in your report, but the right call for a fast, explainable hackathon POC.
 
 After clustering, `train_models.py` **ranks the 4 discovered clusters by average billed
 amount** and assigns human-readable cost-tier labels (`COST_TIER_LABELS` at
-`train_models.py:33`), then **independently** overwrites whichever single cluster has
+`train_models.py:49`), then **independently** overwrites whichever single cluster has
 the highest denial rate with a dedicated outlier label (`OUTLIER_LABEL`):
 
 <table>
@@ -410,22 +418,38 @@ data is used anywhere):
 | `claims` | 1,500+ | billed/paid amount, treatment_type, length_of_stay, `risk_label` (grows via CSV upload) |
 | `provider_timeseries` | 5,400 | daily_claim_count, daily_paid_total, + `anomaly_score`/`is_anomaly` |
 
-**Models** (`services/ml-service/ml/train_models.py`, persisted with joblib, loaded once at startup
-in `ml/inference.py`):
+**Models** (`services/ml-service/ml/train_models.py`, saved as a versioned set in the model
+registry `ml/models/<version>/`, loaded once at startup in `ml/inference.py`):
 
 <table>
 <thead><tr><th>Model</th><th>Algorithm</th><th>Trained on</th><th>Capability</th></tr></thead>
 <tbody>
-<tr><td><code>classifier.joblib</code></td><td>RandomForestClassifier (200 trees, depth 8)</td><td>billed_amount, length_of_stay, prior_claims_count, age, treatment_type, procedure_code → <code>risk_label</code></td><td><img src="https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square" /></td></tr>
+<tr><td><code>classifier.joblib</code></td><td>Ordinal multinomial logistic regression with a regularized per-provider effect; Low/Medium/High cutoffs tuned for macro-F1 on out-of-fold scores (<a href="docs/adr/0010-risk-model.md">ADR 0010</a>)</td><td>billed_amount, length_of_stay, prior_claims_count, provider_id → <code>risk_label</code></td><td><img src="https://img.shields.io/badge/-Classification-4C6EF5?style=flat-square" /></td></tr>
 <tr><td><code>predictor.joblib</code></td><td>GradientBoostingRegressor (150 estimators, depth 3)</td><td>billed_amount, length_of_stay, provider_avg_claim_amount, treatment_type → <code>paid_amount</code></td><td><img src="https://img.shields.io/badge/-Prediction-7048E8?style=flat-square" /></td></tr>
 <tr><td><code>cluster_model.joblib</code></td><td>KMeans (k=4) on standardized features</td><td>avg_billed, claim_volume, denial_rate, avg_length_of_stay (per provider) → cluster</td><td><img src="https://img.shields.io/badge/-Clustering-E64980?style=flat-square" /></td></tr>
 <tr><td><code>anomaly_model.joblib</code></td><td>IsolationForest (contamination=0.05)</td><td>rolling 7-day z-scores of daily claim count &amp; paid total → anomaly flag</td><td><img src="https://img.shields.io/badge/-Anomaly%20Detection-E8590C?style=flat-square" /></td></tr>
 </tbody>
 </table>
 
-Training runs once (`python -m ml.train_models`, or automatically inside the backend
+Training runs once (`python -m ml.train_models`, or automatically inside the ml-service
 Docker image build) and writes the cluster/anomaly results back onto
-`providers.csv`/`provider_timeseries.csv` so they seed into MongoDB pre-computed.
+`providers.csv`/`provider_timeseries.csv` so they seed into MongoDB pre-computed. On start,
+ml-service seeds MongoDB only when it is empty, so a restart never wipes uploaded claims
+(`POST /seed` is the deliberate full reset).
+
+**Risk classifier quality** (1,500 claims; full table in [ADR 0010](docs/adr/0010-risk-model.md)):
+
+| Metric | Macro-F1 |
+|---|---|
+| Original POC (random forest) | 0.35 |
+| **5-fold cross-validated (headline)** | **0.602 ± 0.023** |
+| Oracle that knows the hidden provider risk (noise ceiling) | 0.607 |
+| Single 20% holdout | 0.566 (oracle on the same split: 0.550) |
+
+The model sits at the ceiling set by the generator's label noise, and the cross-validation
+refits everything, including provider effects and cutoffs, inside each fold, so no fold
+sees its own rows. These numbers hold for this synthetic generator; real claims would need
+their own validation. Training fails below `MIN_MACRO_F1`.
 
 > [!WARNING]
 > All claims/patients/providers are **synthetic** (generated with a fixed random seed) —
@@ -488,6 +512,8 @@ ml-service `POST /v1/score|classify|predict-payment`, `GET /v1/models`,
 
 ```bash
 cp .env.example .env            # optional: GROQ_API_KEY (without it the rule engine decides)
+                                # GROQ_MODEL / AI_FALLBACK_MODELS default to openai/gpt-oss-120b,
+                                # qwen/qwen3.8-27b, openai/gpt-oss-20b
 make build SERVICE=ml-service   # one image at a time (memory-safe), then ai-agent, claims-api, frontend
 make up                         # docker compose up -d
 docker compose --profile observability up -d   # + Prometheus :9090, Grafana :3001, Jaeger :16686
