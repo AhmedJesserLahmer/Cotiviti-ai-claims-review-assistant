@@ -26,3 +26,15 @@ def test_requests_are_counted_by_route_template():
     client.get("/nope")
     assert _value("http_requests_total", {**labels, "route": "__unmatched__", "status": "404"}) >= 1
     assert _value("http_request_duration_seconds_count", {k: labels[k] for k in ("service", "method", "route")}) >= 2
+
+
+def test_metrics_endpoint_is_exposed_by_the_app_factory():
+    from claims_common.app import create_app
+    from claims_common.settings import ServiceSettings
+
+    client = TestClient(create_app(ServiceSettings(_env_file=None, service_name="factory-svc"), title="t"))
+    client.get("/health/live")
+    body = client.get("/metrics").text
+    assert 'http_requests_total{method="GET",route="/health/live",service="factory-svc",status="200"}' in body
+    disabled = create_app(ServiceSettings(_env_file=None, metrics_enabled=False), title="t")
+    assert TestClient(disabled).get("/metrics").status_code == 404

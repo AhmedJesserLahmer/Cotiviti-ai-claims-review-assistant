@@ -14,6 +14,8 @@ class ServiceSettings(BaseSettings):
     log_format: str = "json"
     # Comma-separated list of browser origins allowed to call the service.
     cors_origins: str = "http://localhost:3000"
+    # /metrics for Prometheus. In Kubernetes a NetworkPolicy restricts who can scrape it.
+    metrics_enabled: bool = True
 
     @property
     def cors_origin_list(self) -> list[str]:
