@@ -3,11 +3,13 @@ import uuid
 from datetime import date
 
 import pandas as pd
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from core.analysis import proxy_analysis_stream, request_analysis
+from core.audit import get_audit_log
 from core.limits import analyze_limit, bulk_limit
+from core.security import Principal, get_principal
 from db.mongo import db
 from models.schemas import AnalysisResult, ClaimOut, ClaimUploadError, ClaimUploadResponse
 from routers.jobs import start_analysis_job
@@ -86,6 +88,7 @@ async def upload_claims(
     file: UploadFile = File(...),
     auto_analyze: bool = Form(False),
     async_analysis: bool = Form(False),
+    principal: Principal = Depends(get_principal),
 ):
     """Bulk-ingest one or many claims from a CSV file.
 
@@ -195,9 +198,15 @@ async def upload_claims(
         await db["patients"].insert_many(patients_to_insert)
     if claims_to_insert:
         await db["claims"].insert_many(claims_to_insert)
+    await get_audit_log().append(
+        "claims.upload",
+        actor=principal.subject,
+        subject=file.filename or "upload.csv",
+        data={"inserted": len(inserted_claim_ids), "rejected": len(errors), "claim_ids": inserted_claim_ids[:500]},
+    )
 
     if auto_analyze and async_analysis and inserted_claim_ids:
-        job = await start_analysis_job(inserted_claim_ids, source="upload")
+        job = await start_analysis_job(inserted_claim_ids, source="upload", actor=principal.subject)
         accepted = ClaimUploadResponse(
             inserted_count=len(inserted_claim_ids), claim_ids=inserted_claim_ids, errors=errors, job_id=job["job_id"]
         )

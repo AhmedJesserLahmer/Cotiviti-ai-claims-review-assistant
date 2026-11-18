@@ -46,3 +46,16 @@ def test_quality_analytics(client):
     assert report["feedback"]["unsafe_approval_rate"] == 1.0
     assert report["feedback"]["agreement_by_source"] == {"llm": 0.0, "rules": 1.0}
     assert report["feedback"]["agreement_by_prompt"] == {"claim_reasoning@2.1.0": {"rate": 0.0, "n": 1}}
+
+
+def test_feedback_is_audited_and_the_log_verifies(client, monkeypatch):
+    from core import audit
+    from claims_common.audit_log import AuditLog
+
+    audit_db = FakeDB()
+    monkeypatch.setattr(audit, "_audit", AuditLog(audit_db, hmac_key="k" * 32))
+    client.post("/claims/C1/feedback", json={"verdict": "agree", "final_decision": "approve", "reviewer": "r"})
+    entries = audit_db["audit_log"].docs
+    assert entries[0]["event_type"] == "review.feedback" and entries[0]["seq"] == 1
+    report = client.get("/admin/audit/verify").json()
+    assert report == {"checked": 1, "valid": True, "bad_signatures": [], "missing_seqs": []}

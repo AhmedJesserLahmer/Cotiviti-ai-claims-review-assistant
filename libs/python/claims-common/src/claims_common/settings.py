@@ -14,6 +14,8 @@ class ServiceSettings(BaseSettings):
     log_format: str = "json"
     # Comma-separated list of browser origins allowed to call the service.
     cors_origins: str = "http://localhost:3000"
+    # HMAC key signing audit-log entries (>= 32 chars, required in production).
+    audit_hmac_key: str = ""
     # /metrics for Prometheus. In Kubernetes a NetworkPolicy restricts who can scrape it.
     metrics_enabled: bool = True
 
@@ -27,3 +29,14 @@ class ServiceSettings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in {"prod", "production"}
+
+    def audit_key(self) -> str:
+        from claims_common.audit_log import DEV_KEY
+
+        if self.audit_hmac_key:
+            if self.is_production and len(self.audit_hmac_key) < 32:
+                raise RuntimeError("AUDIT_HMAC_KEY must be at least 32 characters in production")
+            return self.audit_hmac_key
+        if self.is_production:
+            raise RuntimeError("AUDIT_HMAC_KEY is required when ENVIRONMENT=prod")
+        return DEV_KEY
