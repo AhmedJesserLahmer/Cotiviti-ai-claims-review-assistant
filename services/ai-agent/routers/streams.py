@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from agent.graph import MLUnavailableError, stream_analysis
+from agent.graph import InvalidClaimDataError, MLUnavailableError, stream_analysis
 from db.mongo import db
 
 router = APIRouter(prefix="/v1", tags=["analyses"])
@@ -32,6 +32,8 @@ async def stream(claim_id: str, refresh: bool = False):
                 yield sse(event, payload)
         except MLUnavailableError:
             yield sse("error", {"detail": "ML scoring is temporarily unavailable", "status": 503})
+        except InvalidClaimDataError as exc:
+            yield sse("error", {"detail": str(exc), "status": 422})
         except Exception as exc:  # noqa: BLE001 - the stream must end with an event, not a cut
             log.exception("analysis stream failed", extra={"claim_id": claim_id})
             yield sse("error", {"detail": f"analysis failed: {type(exc).__name__}", "status": 500})

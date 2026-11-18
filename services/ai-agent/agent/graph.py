@@ -14,6 +14,7 @@ fallback. The graph itself stays a pure orchestration of data, ML and AI steps.
 import logging
 
 from langgraph.graph import END, StateGraph
+from pydantic import ValidationError
 
 from agent.state import AgentState
 from ai_platform.audit import AIRunMetadata
@@ -39,6 +40,18 @@ _CACHEABLE_SIGNALS = (
 
 class MLUnavailableError(RuntimeError):
     """ml-service is down and there is no previous analysis to fall back on."""
+
+
+class InvalidClaimDataError(ValueError):
+    """The stored claim does not satisfy the scoring contract (e.g. a field is too long).
+
+    Raised before anything is sent to ml-service; the caller answers 422 so the bad
+    record is fixed at the source instead of failing as an internal error.
+    """
+
+    def __init__(self, fields: list[str]):
+        self.fields = fields
+        super().__init__(f"claim data cannot be scored; invalid field(s): {', '.join(fields)}")
 
 
 async def fetch_claim_context(state: AgentState) -> AgentState:
@@ -69,16 +82,20 @@ async def fetch_claim_context(state: AgentState) -> AgentState:
 
 async def score_claim(claim: dict, patient: dict, provider: dict) -> ScoreResponse:
     """Claim-level model outputs from ml-service."""
-    request = ScoreRequest(
-        billed_amount=claim["billed_amount"],
-        length_of_stay=claim.get("length_of_stay") or 0,
-        prior_claims_count=claim.get("prior_claims_count") or 0,
-        treatment_type=claim["treatment_type"],
-        procedure_code=claim["procedure_code"],
-        patient_age=patient["age"],
-        provider_avg_claim_amount=provider.get("avg_claim_amount", claim["billed_amount"]),
-        provider_id=claim.get("provider_id"),
-    )
+    try:
+        request = ScoreRequest(
+            billed_amount=claim["billed_amount"],
+            length_of_stay=claim.get("length_of_stay") or 0,
+            prior_claims_count=claim.get("prior_claims_count") or 0,
+            treatment_type=claim["treatment_type"],
+            procedure_code=claim["procedure_code"],
+            patient_age=patient["age"],
+            provider_avg_claim_amount=provider.get("avg_claim_amount", claim["billed_amount"]),
+            provider_id=claim.get("provider_id"),
+        )
+    except ValidationError as exc:
+        fields = sorted({".".join(str(p) for p in err["loc"]) for err in exc.errors()})
+        raise InvalidClaimDataError(fields) from exc
     body = await get_ml_service().post("/v1/score", json=request.model_dump())
     return ScoreResponse.model_validate(body)
 
