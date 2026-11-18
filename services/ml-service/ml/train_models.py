@@ -26,7 +26,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from ml import ood, registry
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 HOLDOUT_FRACTION = 0.2
 RANDOM_STATE = 42
 
@@ -237,6 +237,8 @@ def main():
             "anomaly_model": anomaly_model,
         },
         manifest,
+        # Scheduled retraining sets TRAINING_ACTIVATE=false: a human promotes the version.
+        activate=os.environ.get("TRAINING_ACTIVATE", "true").lower() == "true",
     )
 
     print(f"Trained model version {version} -> {path}")

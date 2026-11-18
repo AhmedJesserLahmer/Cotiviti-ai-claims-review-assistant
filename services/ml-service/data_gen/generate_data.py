@@ -12,7 +12,8 @@ import pandas as pd
 from faker import Faker
 
 SEED = 42
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+# DATA_DIR lets jobs with a read-only image write the dataset elsewhere (e.g. /tmp).
+OUT_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 
 N_PROVIDERS = 30
 N_PATIENTS = 200
