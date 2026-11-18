@@ -22,8 +22,12 @@ async def with_timeout(
     provider: str | None = None,
     model: str | None = None,
 ) -> T:
+    # asyncio.timeout runs the call in the caller's task. On Python 3.11, wait_for wraps
+    # it in an inner task instead: cancelling a lost hedge then takes extra loop turns
+    # and OpenTelemetry spans are closed from a different context (ValueError on detach).
     try:
-        return await asyncio.wait_for(awaitable, timeout=seconds)
+        async with asyncio.timeout(seconds):
+            return await awaitable
     except TimeoutError as exc:
         raise LLMTimeoutError(
             f"no response within {seconds:g}s", provider=provider, model=model
