@@ -11,9 +11,9 @@ try:
 except registry.ModelNotFoundError:
     pytest.skip("models not trained yet", allow_module_level=True)
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from claims_common.contracts import ClassifyResponse, PaymentResponse, ScoreRequest, ScoreResponse  # noqa: E402
 
 REQUEST = ScoreRequest(

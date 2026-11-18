@@ -109,7 +109,10 @@ class ClaimReviewAI:
         try:
             self._check_budget(run)
             response = await self.client.generate(
-                messages, recorder=run, temperature=self.settings.temperature, max_tokens=self.settings.max_output_tokens
+                messages,
+                recorder=run,
+                temperature=self.settings.temperature,
+                max_tokens=self.settings.max_output_tokens,
             )
             text, findings = sanitize_reasoning(response.text, max_chars=self.settings.max_reasoning_chars)
         except (AllProvidersFailedError, OutputValidationError, TokenBudgetExceededError) as exc:

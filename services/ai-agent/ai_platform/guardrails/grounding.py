@@ -36,7 +36,9 @@ def _close(value: float, candidates: list[float], *, rel: float, abs_tol: float)
     return any(abs(value - c) <= max(abs_tol, rel * abs(c)) for c in candidates)
 
 
-def check_grounding(text: str, claim: dict[str, Any], signals: dict[str, Any], provider: dict | None = None) -> GroundingReport:
+def check_grounding(
+    text: str, claim: dict[str, Any], signals: dict[str, Any], provider: dict | None = None
+) -> GroundingReport:
     sources = {**(provider or {}), **claim, **signals}
     money = [float(sources[k]) for k in MONEY_FIELDS if isinstance(sources.get(k), (int, float))]
 

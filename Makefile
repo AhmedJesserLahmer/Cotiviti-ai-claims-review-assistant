@@ -76,5 +76,5 @@ train: ## Generate synthetic data and train a new model version locally
 	cd services/ml-service && $(PYTHON) -m data_gen.generate_data && $(PYTHON) -m ml.train_models
 
 .PHONY: lint
-lint: ## Lint python code with ruff
-	$(PYTHON) -m ruff check $(PY_PACKAGES)
+lint: ## Lint python code with ruff (config: ruff.toml)
+	$(PYTHON) -m ruff check libs/python services

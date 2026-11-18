@@ -76,8 +76,8 @@ def _risk_label(billed_amount, length_of_stay, prior_claims_count, provider_risk
 
 def generate_claims(rng: np.random.Generator, providers: pd.DataFrame, patients: pd.DataFrame) -> pd.DataFrame:
     provider_ids = providers["provider_id"].to_numpy()
-    provider_risk = dict(zip(providers["provider_id"], providers["risk_baseline"]))
-    provider_avg = dict(zip(providers["provider_id"], providers["avg_claim_amount"]))
+    provider_risk = dict(zip(providers["provider_id"], providers["risk_baseline"], strict=True))
+    provider_avg = dict(zip(providers["provider_id"], providers["avg_claim_amount"], strict=True))
     patient_ids = patients["patient_id"].to_numpy()
 
     dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=TIMESERIES_DAYS)

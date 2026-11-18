@@ -29,7 +29,8 @@ REQUIRED_UPLOAD_COLUMNS = [
 
 # Free-text columns that are stored and may later be exported to spreadsheets.
 TEXT_COLUMNS = (
-    "claim_id", "patient_id", "provider_id", "procedure_code", "diagnosis_code", "treatment_type", "status", "claim_date",
+    "claim_id", "patient_id", "provider_id", "procedure_code",
+    "diagnosis_code", "treatment_type", "status", "claim_date",
 )
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -40,7 +40,7 @@ class GuardrailEvent(BaseModel):
 
 class AIRunMetadata(BaseModel):
     run_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
-    started_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    started_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     prompt_versions: dict[str, str] = Field(default_factory=dict)
     attempts: list[AttemptRecord] = Field(default_factory=list)
     provider_used: str | None = None

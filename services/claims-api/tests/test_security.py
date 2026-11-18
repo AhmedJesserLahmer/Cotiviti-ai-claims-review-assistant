@@ -5,9 +5,9 @@ import pytest
 pytest.importorskip("motor")
 jwt = pytest.importorskip("jwt")
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from core import security  # noqa: E402
 
 SECRET = "k" * 40

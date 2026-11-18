@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,7 @@ class ModelNotFoundError(RuntimeError):
 
 
 def new_version_id(now: datetime | None = None) -> str:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     return "v" + now.strftime("%Y%m%dT%H%M%SZ")
 
 
@@ -50,7 +50,12 @@ def version_dir(version: str, root: Path = MODELS_ROOT) -> Path:
 
 
 def save_version(
-    version: str, artifacts: dict[str, Any], manifest: dict[str, Any], *, root: Path = MODELS_ROOT, activate: bool = True
+    version: str,
+    artifacts: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    root: Path = MODELS_ROOT,
+    activate: bool = True,
 ) -> Path:
     target = version_dir(version, root)
     if target.exists():
@@ -58,7 +63,7 @@ def save_version(
     target.mkdir(parents=True)
     for name, obj in artifacts.items():
         joblib.dump(obj, target / f"{name}.joblib")
-    full_manifest = {"version": version, "created_at": datetime.now(timezone.utc).isoformat(), **manifest}
+    full_manifest = {"version": version, "created_at": datetime.now(UTC).isoformat(), **manifest}
     (target / MANIFEST_FILE).write_text(json.dumps(full_manifest, indent=2, default=str))
     if activate:
         set_current(version, root=root)

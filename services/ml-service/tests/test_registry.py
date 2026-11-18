@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 
 from ml import registry
@@ -33,6 +35,6 @@ def test_env_pin_and_missing_registry(tmp_path, monkeypatch):
 
 
 def test_version_ids_are_sortable():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    assert registry.new_version_id(datetime(2026, 11, 17, 9, 5, tzinfo=timezone.utc)) == "v20261117T090500Z"
+    assert registry.new_version_id(datetime(2026, 11, 17, 9, 5, tzinfo=UTC)) == "v20261117T090500Z"

@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("motor")
 
+import main  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from routers import claims  # noqa: E402
 from tests.fakes import FakeCollection, FakeDB  # noqa: E402
 

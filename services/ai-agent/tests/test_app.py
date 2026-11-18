@@ -2,9 +2,8 @@ import pytest
 
 pytest.importorskip("motor")
 
-from fastapi.testclient import TestClient  # noqa: E402
-
 import main  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 def test_liveness_and_no_cors():

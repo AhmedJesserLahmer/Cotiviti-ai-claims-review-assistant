@@ -32,8 +32,8 @@ class InternalAuthMiddleware:
         presented = dict(scope.get("headers") or []).get(HEADER.encode(), b"")
         if not hmac.compare_digest(presented, self._token):
             body = json.dumps({"detail": "missing or invalid internal token"}).encode()
-            await send({"type": "http.response.start", "status": 401,
-                        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+            headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
+            await send({"type": "http.response.start", "status": 401, "headers": headers})
             await send({"type": "http.response.body", "body": body})
             return
         await self.app(scope, receive, send)

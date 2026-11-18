@@ -25,6 +25,8 @@ def parse_prices(raw: str) -> dict[str, tuple[float, float]]:
     return prices
 
 
-def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int, prices: dict[str, tuple[float, float]]) -> float:
+def estimate_cost(
+    model: str, prompt_tokens: int, completion_tokens: int, prices: dict[str, tuple[float, float]]
+) -> float:
     prompt_rate, completion_rate = prices.get(model, (0.0, 0.0))
     return (prompt_tokens * prompt_rate + completion_tokens * completion_rate) / 1_000_000

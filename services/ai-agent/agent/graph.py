@@ -32,7 +32,9 @@ MAX_LOOPS = 1
 log = logging.getLogger("ai_agent.graph")
 
 # Claim-level fields that can be reused from a previous analysis when ml-service is down.
-_CACHEABLE_SIGNALS = ("predicted_risk_label", "risk_probabilities", "predicted_paid_amount", "model_version", "ood_flags")
+_CACHEABLE_SIGNALS = (
+    "predicted_risk_label", "risk_probabilities", "predicted_paid_amount", "model_version", "ood_flags",
+)
 
 
 class MLUnavailableError(RuntimeError):

@@ -2,10 +2,10 @@ import pytest
 
 pytest.importorskip("motor")
 
+import main  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-import main  # noqa: E402
 from claims_common.contracts import AnalysisResult  # noqa: E402
 from core import jobs, runners  # noqa: E402
 from routers import jobs as jobs_router  # noqa: E402

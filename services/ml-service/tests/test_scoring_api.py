@@ -9,9 +9,8 @@ try:
 except registry.ModelNotFoundError:
     pytest.skip("models not trained yet (run: python -m ml.train_models)", allow_module_level=True)
 
-from fastapi.testclient import TestClient  # noqa: E402
-
 import main  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 FEATURES = {
     "billed_amount": 5200.0, "length_of_stay": 3, "prior_claims_count": 2, "treatment_type": "Inpatient",
