@@ -1,0 +1,55 @@
+{{- if .Values.ingress.enabled }}
+{{- $ing := .Values.ingress }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "claims-review.fullname" . }}
+  labels:
+    {{- include "claims-review.labels" . | nindent 4 }}
+  annotations:
+    {{- if $ing.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ $ing.tls.clusterIssuer | quote }}
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    {{- end }}
+    # Matches the API's own upload limit (5 MB) with headroom for multipart overhead.
+    nginx.ingress.kubernetes.io/proxy-body-size: "6m"
+    # Analyses can take tens of seconds; SSE progress streams must not be buffered.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    {{- if $ing.oauth2Proxy.enabled }}
+    nginx.ingress.kubernetes.io/auth-url: {{ $ing.oauth2Proxy.authUrl | quote }}
+    nginx.ingress.kubernetes.io/auth-signin: {{ $ing.oauth2Proxy.signinUrl | quote }}
+    nginx.ingress.kubernetes.io/auth-response-headers: "Authorization,X-Auth-Request-Email"
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $ing.className }}
+  {{- if $ing.tls.enabled }}
+  tls:
+    - hosts: [{{ $ing.hosts.app | quote }}, {{ $ing.hosts.api | quote }}]
+      secretName: {{ include "claims-review.fullname" . }}-tls
+  {{- end }}
+  rules:
+    - host: {{ $ing.hosts.app | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "claims-review.componentName" (dict "root" . "component" "frontend") }}
+                port:
+                  name: http
+    - host: {{ $ing.hosts.api | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "claims-review.componentName" (dict "root" . "component" "claims-api") }}
+                port:
+                  name: http
+{{- end }}
