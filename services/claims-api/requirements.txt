@@ -1,17 +1,17 @@
 # claims-api is a thin gateway: HTTP, MongoDB, CSV parsing. ML and LLM
 # dependencies live in ai-agent / ml-service.
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-motor==3.6.0
-python-multipart==0.0.20
-pydantic==2.10.4
-pydantic-settings==2.7.1
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+motor==3.7.1
+python-multipart==0.0.33
+pydantic==2.14.3
+pydantic-settings==2.16.3
 httpx==0.28.1
-prometheus-client==0.21.1
+prometheus-client==0.26.0
 pandas==2.2.3
-arq==0.26.1
+arq==0.28.0
 redis==5.2.1
-pyjwt[crypto]==2.10.1
+pyjwt[crypto]==2.15.1
 pytest==8.3.4
 pytest-asyncio==0.25.0
-requests==2.32.3
+requests==2.34.2
